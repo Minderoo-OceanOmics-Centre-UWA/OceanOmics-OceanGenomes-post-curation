@@ -1,9 +1,0 @@
-sample	dataset	complete	single_copy	multi_copy	fragmented	missing	n_markers	internal_stop_codon_percent	scaffold_n50_bus	contigs_n50_bus	percent_gaps	number_of_scaffolds
-OG39_v250331.hic1.3.curated.hap1	actinopterygii_odb10	98.2	97.7	0.5	0.8	1	3640	1.7	24140244	2421709	0.02%	148
-OG39_v250331.hic1.3.curated.hap2	actinopterygii_odb10	98.3	97.6	0.7	0.9	0.8	3640	1.7	23898623	2655874	0.02%	147
-OG788_v250505.hic1.3.curated.hap1	actinopterygii_odb10	99	98.6	0.4	0.8	0.2	3640	2.1	26789442	22627354	0.00%	488
-OG788_v250505.hic1.3.curated.hap2	actinopterygii_odb10	99.1	98.7	0.4	0.8	0.1	3640	1.8	26463335	22512538	0.00%	272
-OG678_v240327.hic1.3.curated.hap1	actinopterygii_odb10	98.5	98.1	0.4	0.9	0.6	3640	2.3	30868828	25367074	0.00%	142
-OG678_v240327.hic1.3.curated.hap2	actinopterygii_odb10	98.9	97.9	1	0.9	0.2	3640	2.1	31692961	21772288	0.00%	98
-OG859_v241023.hic1.3.curated.hap1	vertebrata_odb10	99.3	93.2	6.1	0.3	0.4	3354	19.3				
-OG859_v241023.hic1.3.curated.hap2	vertebrata_odb11	97.9	92.3	5.6	0.5	1.6	3354	19.2				

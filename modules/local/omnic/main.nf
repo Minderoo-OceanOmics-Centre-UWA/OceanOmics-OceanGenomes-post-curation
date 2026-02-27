@@ -24,17 +24,38 @@ process OMNIC {
         def prefix = task.ext.prefix ?: "${meta.id}"
     
     """
-    export PATH=$PATH:/opt/conda/envs/pairtools/bin
-    samtools faidx ${assembly} \
-    && cut -f1,2 *.fai > "${meta.id}.${haplotype}.genome" \
-    && bwa index ${assembly} \
-    && bwa mem -5SP -T0 -t64 ${assembly} ${reads} -o "${meta.id}.${haplotype}.aligned.sam" \
-    && pairtools parse --min-mapq 40 --walks-policy 5unique --max-inter-align-gap 30 --nproc-in 32 --nproc-out 32 --chroms-path "${meta.id}.${haplotype}.genome" "${meta.id}.${haplotype}.aligned.sam" >  "${meta.id}.${haplotype}.parsed.pairsam" \
-    && pairtools sort --nproc 32 --tmpdir=${tempdir} "${meta.id}.${haplotype}.parsed.pairsam" > "${meta.id}.${haplotype}.sorted.pairsam" \
-    && pairtools dedup --nproc-in 32 --nproc-out 32 --mark-dups --output-stats "${meta.id}.${haplotype}.stats.txt" --output "${meta.id}.${haplotype}.dedup.pairsam" "${meta.id}.${haplotype}.sorted.pairsam" \
-    && pairtools split --nproc-in 32 --nproc-out 32 --output-pairs "${meta.id}.${haplotype}.mapped.pairs" --output-sam "${meta.id}.${haplotype}.unsorted.bam" "${meta.id}.${haplotype}.dedup.pairsam" \
-    && samtools sort -@32 -T  "${tempdir}/${meta.id}_temp.bam" -o "${meta.id}.${haplotype}.mapped.PT.bam" "${meta.id}.${haplotype}.unsorted.bam" \
-    && samtools index "${meta.id}.${haplotype}.mapped.PT.bam"
+    export PATH=\$PATH:/opt/conda/envs/pairtools/bin
+
+    samtools faidx ${assembly}
+    cut -f1,2 ${assembly}.fai > "${meta.id}.${haplotype}.genome"
+    bwa index ${assembly}
+    bwa mem -5SP -T0 -t24 ${assembly} ${reads} \\
+    | pairtools parse \\
+        --min-mapq 40 \\
+        --walks-policy 5unique \\
+        --max-inter-align-gap 30 \\
+        --nproc-in 24 \\
+        --nproc-out 24 \\
+        --chroms-path "${meta.id}.${haplotype}.genome" \\
+    | pairtools sort \\
+        --nproc 24 \\
+        --tmpdir ${tempdir} \\
+    | pairtools dedup \\
+        --nproc-in 24 \\
+        --nproc-out 24 \\
+        --mark-dups \\
+        --output-stats "${meta.id}.${haplotype}.stats.txt" \\
+    | pairtools split \\
+        --nproc-in 24 \\
+        --nproc-out 24 \\
+        --output-pairs /dev/null \\
+        --output-sam - \\
+    | samtools sort -@32 -T "${tempdir}/${meta.id}_temp.bam" -o "${meta.id}.${haplotype}.mapped.PT.bam" -
+
+    samtools index "${meta.id}.${haplotype}.mapped.PT.bam"
+
+    rm -f "${meta.id}.${haplotype}.genome" \\
+          ${assembly}.amb ${assembly}.ann ${assembly}.bwt ${assembly}.pac ${assembly}.sa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

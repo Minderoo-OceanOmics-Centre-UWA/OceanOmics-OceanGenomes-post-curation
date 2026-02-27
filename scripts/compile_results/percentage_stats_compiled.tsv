@@ -1,5 +1,0 @@
-sample	num_chromosomes_hap1	num_chromosomes_hap2	pct_hap1_assigned	pct_hap2_assigned	pct_hap1_no_super	pct_hap2_no_super	num_seq_hap1_no_super	max_len_hap1_no_super	num_seq_hap2_no_super	max_len_hap2_no_super
-OG39_v250331.hic1.3.curated	20	20	96.54	95.20	3.46	4.80	118	1228336	119	6241902
-OG678_v240327.hic2.3.curated	24	24	98.68	98.67	1.32	1.33	117	3170106	74	3072643
-OG788_v250505.hic1.3.curated	24	24	91.16	94.28	8.84	5.72	464	2128295	248	2053081
-OG859_v241023.hic1.3.curated	20	18	95.62	96.69	4.38	3.31	258	12295805	224	3668960

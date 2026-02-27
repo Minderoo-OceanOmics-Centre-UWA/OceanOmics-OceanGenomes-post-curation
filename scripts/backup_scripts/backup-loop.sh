@@ -1,10 +1,10 @@
-scripts=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts
-
-csv_file="$scripts/backup.csv"
+#!/bin/bash
+scripts=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts/backup_scripts
+csv_file=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/assets/samplesheet.csv
 
 # Loop through each line of the CSV
-tail -n +2 "$csv_file" | while IFS=',' read -r OG date ver; do
-    # Submit the backup script, passing OG and asm_version as arguments
-    sbatch $scripts/backup.sh "$OG" "$date" "$ver"
-    echo $OG $date $ver
+tail -n +2 "$csv_file" | while IFS=',' read -r sample hic_dir assembly meryldb agp version date genomesize; do
+    # Pass sample, date, version to your job script
+    sbatch "$scripts/backup.sh" "$sample" "$date" "$version"
+    echo "Submitted: $sample $date $version"
 done
