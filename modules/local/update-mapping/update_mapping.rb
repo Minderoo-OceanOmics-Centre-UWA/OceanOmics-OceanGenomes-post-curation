@@ -67,7 +67,7 @@ File.new(fasta).each_line{|line|
         new_table.puts([name+suffix, hap2_hap1_mapping[name]+suffix].join("\t")) if new_mapping
         #new_chrom_file.puts(create_chromosme_list_line(hap2_hap1_mapping[name]+suffix)) if chromosome_list
       else
-        while hap2_hap1_mapping.reverse_each.to_h.has_key?("SUPER_#{count}")
+        while hap2_hap1_mapping.reverse_each.to_h.has_key?("SUPER_#{count}") || hap2_hap1_mapping.values.include?("SUPER_#{count}")
           count+=1
         end
         id = "SUPER_#{count}"
@@ -75,7 +75,7 @@ File.new(fasta).each_line{|line|
         hap2_hap1_mapping[id]=name
         $stderr.puts("renaming #{name}#{suffix} => #{id}#{suffix}") if debug
         new_table.puts( [name+suffix,hap2_hap1_mapping[name]+suffix].join("\t")) if new_mapping
-        new_chrom_file.puts(create_chromosme_list_line(hap2_hap1_mapping[name]+suffix)) if chromosome_list
+        #new_chrom_file.puts(create_chromosme_list_line(hap2_hap1_mapping[name]+suffix)) if chromosome_list
       end
     elsif />(SUPER_\w+)(_unloc_\d+)*/.match(line)
       name   = "#{$1}"

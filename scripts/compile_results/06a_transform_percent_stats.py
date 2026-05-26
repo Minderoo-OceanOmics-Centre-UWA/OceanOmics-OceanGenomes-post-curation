@@ -14,12 +14,14 @@ df = pd.read_csv(input_file, sep="\t", dtype=str)
 # Parse identifiers
 df["og_id"] = df["sample"].str.split('.').str[0].str.split('_').str[0]
 df["seq_date"] = df["sample"].str.split('.').str[0].str.split('_').str[1].str.lstrip("v")
+df["version"] = df["sample"].str.split('.').str[1]
 df["stage"] = df["sample"].str.extract(r"\.hic\d+\.(\d+)").astype(int)
 
 # Construct hap1 and hap2 records
 hap1 = pd.DataFrame({
     "og_id": df["og_id"],
     "seq_date": df["seq_date"],
+    "version": df["version"],
     "stage": df["stage"],
     "haplotype": "hap1",
     "num_chromosomes": df["num_chromosomes_hap1"],
@@ -32,6 +34,7 @@ hap1 = pd.DataFrame({
 hap2 = pd.DataFrame({
     "og_id": df["og_id"],
     "seq_date": df["seq_date"],
+    "version": df["version"],
     "stage": df["stage"],
     "haplotype": "hap2",
     "num_chromosomes": df["num_chromosomes_hap2"],

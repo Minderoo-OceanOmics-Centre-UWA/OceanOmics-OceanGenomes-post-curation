@@ -1,4 +1,4 @@
-process CALCULATE_STATS {
+process CALCULATE_STATS_PRETEXT {
     tag "$meta.id"
     label 'process_medium'
 
@@ -8,27 +8,26 @@ process CALCULATE_STATS {
 
     input:
     tuple val(meta), path(hap1)
-    tuple val(meta), path(hap2_new)
+    tuple val(meta), path(hap2)
 
     output:
-    tuple val(meta), path("*stats_output.txt"), emit: stats_output
-    tuple val(meta), path ("*.percentage_stats_output.txt"), emit: percentage_stats
-    path "versions.yml", emit: versions
+    tuple val(meta), path("*stats_output.txt"),        emit: stats_output
+    tuple val(meta), path("*.percentage_stats_output.txt"), emit: percentage_stats
+    path "versions.yml",                               emit: versions
 
     when:
     task.ext.when == null || task.ext.when
 
     script:
-    def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    seqkit grep -r -p "SUPER" ${hap1} | seqkit grep -r -v -p "unloc" > ${prefix}.hap1_super.fa
+    seqkit grep -r -p "SUPER" ${hap1} > ${prefix}.hap1_super.fa
     seqkit grep -r -v -p "SUPER" ${hap1} > ${prefix}.hap1.no_super.fa
-    seqkit grep -r -p "SUPER" ${hap2_new} | seqkit grep -r -v -p "unloc" > ${prefix}.hap2_super.fa
-    seqkit grep -r -v -p "SUPER" ${hap2_new} > ${prefix}.hap2.no_super.fa
-    seqkit stats ${prefix}.hap1_super.fa ${prefix}.hap1.no_super.fa ${hap1} ${prefix}.hap2_super.fa ${prefix}.hap2.no_super.fa ${hap2_new} > ${prefix}.stats_output.txt
+    seqkit grep -r -p "SUPER" ${hap2} > ${prefix}.hap2_super.fa
+    seqkit grep -r -v -p "SUPER" ${hap2} > ${prefix}.hap2.no_super.fa
+    seqkit stats ${prefix}.hap1_super.fa ${prefix}.hap1.no_super.fa ${hap1} ${prefix}.hap2_super.fa ${prefix}.hap2.no_super.fa ${hap2} > ${prefix}.stats_output.txt
 
-    bash ${moduleDir}/calculate_stats.sh "${prefix}.stats_output.txt" "${hap1}" "${hap2_new}"
+    bash ${moduleDir}/calculate_stats_pretext.sh "${prefix}.stats_output.txt" "${hap1}" "${hap2}"
 
     mv percentage_stats_output.txt ${prefix}.percentage_stats_output.txt
 
@@ -42,7 +41,7 @@ process CALCULATE_STATS {
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
     touch "${prefix}.stats_output.txt"
-    touch "percentage_stats_output.txt"
+    touch "${prefix}.percentage_stats_output.txt"
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

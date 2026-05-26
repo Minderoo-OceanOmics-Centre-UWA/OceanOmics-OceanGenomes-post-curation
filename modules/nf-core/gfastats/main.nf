@@ -43,7 +43,7 @@ process GFASTATS {
         $sak \\
         --out-format ${prefix}.${asmversion}.${haplotype}.${out_fmt} \\
         $assembly \\
-        $genomesize \\
+        \$(printf "%.0f" ${genomesize}) \\
         $target \\
         > ${prefix}.${asmversion}.${haplotype}.assembly_summary.txt
 

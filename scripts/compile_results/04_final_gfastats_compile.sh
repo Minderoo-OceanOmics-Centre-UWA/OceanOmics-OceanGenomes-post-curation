@@ -4,7 +4,7 @@
 base_dir="/scratch/pawsey0964/lhuet/post_curation/post-curation/OG*"
 
 # Output file with SQL-compatible column headers
-echo -e "filename\tnum_contigs\tcontig_n50\tcontig_n50_size_mb\tnum_scaffolds\tscaffold_n50\tscaffold_n50_size_mb\tlargest_scaffold\tlargest_scaffold_size_mb\ttotal_scaffold_length\ttotal_scaffold_length_size_mb\tgc_content_percent" > final_gfastats_report.txt
+echo -e "filename\tnum_contigs\tcontig_n50\tcontig_n50_size_mb\tnum_scaffolds\tscaffold_n50\tscaffold_n50_size_mb\tlargest_scaffold\tlargest_scaffold_size_mb\ttotal_scaffold_length\ttotal_scaffold_length_size_mb\tgc_content_percent\tnum_gaps" > final_gfastats_report.txt
 
 # Find input files
 tsv_files=$(find $base_dir -name "*curated*.assembly_summary.txt*")
@@ -20,6 +20,7 @@ for file in $tsv_files; do
             else if ($1 == "#" && $2 == "contigs") { contigs = $3 }
             else if ($1 == "Contig" && $2 == "N50") { contig_N50 = $3 }
             else if ($1 == "GC" && $2 == "content") { gc_content = $4 }
+            else if ($1 == "#" && $2 == "gaps" && $3 == "in" && $4 == "scaffolds") { gaps = $5 }
         }
         END {
             contig_N50_Mb = contig_N50 / 1000000;
@@ -27,6 +28,6 @@ for file in $tsv_files; do
             scaffold_length_Mb = scaffold_length / 1000000;
             largest_scaffold_Mb = largest_scaffold / 1000000;
 
-            print filename, contigs, contig_N50, contig_N50_Mb, scaffolds, scaffold_N50, scaffold_N50_Mb, largest_scaffold, largest_scaffold_Mb, scaffold_length, scaffold_length_Mb, gc_content
+            print filename, contigs, contig_N50, contig_N50_Mb, scaffolds, scaffold_N50, scaffold_N50_Mb, largest_scaffold, largest_scaffold_Mb, scaffold_length, scaffold_length_Mb, gc_content, gaps
         }' "$file" >> final_gfastats_report.txt
 done

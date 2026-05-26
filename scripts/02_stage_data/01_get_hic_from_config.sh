@@ -32,6 +32,7 @@ clean() { printf '%s' "$1" | tr -d '\r' | xargs; }
 
 
 HIC_BUCKET="${HIC_BUCKET:?Missing HIC_BUCKET in config}"
+NPROC="${NPROC:-4}"
 tmp_list="$(mktemp)"
 trap 'rm -f "$tmp_list"' EXIT
 
@@ -49,9 +50,16 @@ done < <(awk -F, 'NR>1 { gsub(/\r/,"",$1); gsub(/\r/,"",$2); print $1 "\t" $2 }'
 
 [[ ${#samples[@]} -gt 0 ]] || { echo "No samples found in $SAMPLESHEET" >&2; exit 1; }
 
+# Create all target dirs up front
+for s in "${samples[@]}"; do mkdir -p "${HIC_DIR_MAP[$s]}"; done
+
 include=()
 for s in "${samples[@]}"; do include+=( --include "${s}*" ); done
 rclone ls "$HIC_BUCKET" ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${include[@]}" > "$tmp_list"
+
+# Build a tab-separated list: remote_full_path <TAB> local_dir
+tmp_pairs="$(mktemp)"
+trap 'rm -f "$tmp_list" "$tmp_pairs"' EXIT
 
 while IFS= read -r line || [[ -n "$line" ]]; do
   path="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//; s/\r$//')"
@@ -64,7 +72,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     for s in "${samples[@]}"; do
       if [[ "$path" == *"$s"* ]]; then
         target="${HIC_DIR_MAP[$s]}"
-        og="$s"
         break
       fi
     done
@@ -75,9 +82,22 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     echo "Warning: no hic_dir for remote path; falling back to ${target}" >&2
   fi
 
-  mkdir -p "$target"
-  echo "Copying ${HIC_BUCKET}/${path} -> ${target}/"
-  rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${HIC_BUCKET}/${path}" "${target}/"
-done < "$tmp_list"
+  printf '%s\t%s\n' "${HIC_BUCKET}/${path}" "$target"
+done < "$tmp_list" > "$tmp_pairs"
+
+# Copy up to NPROC files simultaneously
+total=$(wc -l < "$tmp_pairs")
+echo "Copying ${total} HiC files (NPROC=${NPROC})..."
+running=0
+while IFS=$'\t' read -r src dst; do
+  echo "  $(basename "$src") -> $dst/"
+  rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "$src" "$dst/" &
+  running=$((running + 1))
+  if (( running >= NPROC )); then
+    wait -n 2>/dev/null || wait
+    running=$((running - 1))
+  fi
+done < "$tmp_pairs"
+wait
 
 echo "Done."

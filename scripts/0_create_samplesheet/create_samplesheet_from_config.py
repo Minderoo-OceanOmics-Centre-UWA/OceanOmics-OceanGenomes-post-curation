@@ -18,7 +18,7 @@ Optional:
   SAMPLESHEET_LATEST_NAME=samplesheet.csv
 
 Run:
-  singularity run $SING/psycopg2:0.1.sif python create_postcuration_samplesheet_from_config.py ../postcuration_pipeline.conf
+  singularity run $SING/psycopg2:0.1.sif python create_samplesheet_from_config.py ../postcuration_pipeline.conf
 """
 
 from __future__ import annotations
@@ -248,9 +248,9 @@ def main() -> None:
         cols = [d[0] for d in cur.description]
         df = pd.DataFrame(rows, columns=cols)
 
-        # genomesize numeric nullable; keep as numeric
+        # genomesize: integer (no trailing .0)
         if "genomesize" in df.columns:
-            df["genomesize"] = pd.to_numeric(df["genomesize"], errors="coerce")
+            df["genomesize"] = pd.to_numeric(df["genomesize"], errors="coerce").astype("Int64")
 
         missing_rows = df[df.isnull().any(axis=1)]
         if not missing_rows.empty:

@@ -25,19 +25,19 @@ process UPDATE_MAPPING {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        updatemapping: \$(samtools --version |& sed '1!d ; s/samtools //')
+        ruby: \$(ruby --version | sed 's/ruby //' | sed 's/ .*//')
     END_VERSIONS
     """
 
     stub:
     def args = task.ext.args ?: ''
-    
+
     """
     touch ${prefix}.hap2.chr_level_new.fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        updatemapping: \$(samtools --version |& sed '1!d ; s/samtools //')
+        ruby: \$(ruby --version | sed 's/ruby //' | sed 's/ .*//')
     END_VERSIONS
     """
 }

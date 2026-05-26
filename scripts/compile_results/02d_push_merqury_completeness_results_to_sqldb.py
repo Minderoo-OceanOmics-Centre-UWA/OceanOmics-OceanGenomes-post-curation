@@ -1,17 +1,27 @@
 import psycopg2
 import pandas as pd
-import numpy as np  # Required for handling infinity values
+import numpy as np
+import configparser
+import sys
+from pathlib import Path
 
-#run using singularity run $SING/psycopg2:0.1.sif python 02d_push_merqury_completeness_results_to_sqldb.py
+#run using singularity run $SING/psycopg2:0.1.sif python 02d_push_merqury_completeness_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg
 
-# PostgreSQL connection parameters
-db_params = {
-    'dbname': 'oceanomics_genomes',
-    'user': 'postgres',
-    'password': 'oceanomics',
-    'host': '131.217.178.144',
-    'port': 5432
-}
+def load_db_config(config_file):
+    if not Path(config_file).exists():
+        raise FileNotFoundError(f"Config file '{config_file}' does not exist.")
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return {
+        'dbname': config.get('postgres', 'dbname'),
+        'user': config.get('postgres', 'user'),
+        'password': config.get('postgres', 'password'),
+        'host': config.get('postgres', 'host'),
+        'port': config.getint('postgres', 'port')
+    }
+
+config_file = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "postgresql_details/oceanomics.cfg")
+db_params = load_db_config(config_file)
 
 # File containing Merqury completeness data
 merqury_compiled_path = f"merqury.completeness.stats.tsv"  # if your file structure is different this might not work.
@@ -28,6 +38,7 @@ if 'sample' in merqury.columns:
     # Split 'sample' into 4 new columns
     merqury['og_id'] = merqury['sample'].str.split('.').str[0].str.split('_').str[0]
     merqury['seq_date'] = merqury['sample'].str.split('.').str[0].str.split('_').str[1].str.lstrip('v')
+    merqury['version'] = merqury['sample'].str.split('.').str[1]
     merqury['stage'] = merqury['sample'].str.split('.').str[2].astype(int)
     merqury['haplotype'] = merqury['sample'].str.split('.').str[4].str.split('_').str[0]
 
@@ -59,24 +70,25 @@ try:
         # UPSERT: Insert if not exists, otherwise update
         upsert_query = """
         INSERT INTO ref_genomes (
-            og_id, seq_date, stage, haplotype, solid_k_mers, total_k_mers, completeness
+            og_id, seq_date, version, stage, haplotype, solid_k_mers, total_k_mers, completeness
         )
         VALUES (
-            %(og_id)s, %(seq_date)s, %(stage)s, %(haplotype)s, %(solid_k_mers)s, %(total_k_mers)s, %(completeness)s
+            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s, %(solid_k_mers)s, %(total_k_mers)s, %(completeness)s
         )
-        ON CONFLICT (og_id, seq_date, stage, haplotype) DO UPDATE SET
+        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
             solid_k_mers = EXCLUDED.solid_k_mers,
             total_k_mers = EXCLUDED.total_k_mers,
             completeness = EXCLUDED.completeness;
         """
         params = {
-            "og_id": row_dict["og_id"],  # TEXT / VARCHAR
-            "seq_date": row_dict["seq_date"],  # TEXT or DATE
-            "stage": row_dict["stage"],  # INTEGER
-            "haplotype": row_dict["haplotype"],  # TEXT
-            "solid_k_mers": None if pd.isna(row_dict["solid_k_mers"]) else int(row_dict["solid_k_mers"]),  # BIGINT
-            "total_k_mers": None if pd.isna(row_dict["total_k_mers"]) else int(row_dict["total_k_mers"]),  # BIGINT
-            "completeness": float(row_dict["completeness"]) if row_dict["completeness"] not in [None, ""] else None  # FLOAT
+            "og_id": row_dict["og_id"],
+            "seq_date": row_dict["seq_date"],
+            "version": row_dict["version"],
+            "stage": row_dict["stage"],
+            "haplotype": row_dict["haplotype"],
+            "solid_k_mers": None if pd.isna(row_dict["solid_k_mers"]) else int(row_dict["solid_k_mers"]),
+            "total_k_mers": None if pd.isna(row_dict["total_k_mers"]) else int(row_dict["total_k_mers"]),
+            "completeness": float(row_dict["completeness"]) if row_dict["completeness"] not in [None, ""] else None
         }
 
         # Debugging Check

@@ -6,3 +6,13 @@ results/
 testing/
 testing*
 *.pyc
+
+# Singularity images
+*.img
+*.sif
+
+# Generated logs and compiled outputs
+logs/
+
+# Dated samplesheet backups (keep samplesheet.csv as the example template)
+assets/samplesheet_2*.csv

@@ -1,17 +1,27 @@
 import psycopg2
 import pandas as pd
 import numpy as np
+import configparser
+import sys
+from pathlib import Path
 
-#singularity run $SING/psycopg2:0.1.sif python 05a_push_stats_compiled_results_to_sql.py
+#singularity run $SING/psycopg2:0.1.sif python 05a_push_stats_compiled_results_to_sql.py ~/postgresql_details/oceanomics.cfg
 
-# PostgreSQL connection parameters
-db_params = {
-    'dbname': 'oceanomics_genomes',
-    'user': 'postgres',
-    'password': 'oceanomics',
-    'host': '131.217.178.144',
-    'port': 5432
-}
+def load_db_config(config_file):
+    if not Path(config_file).exists():
+        raise FileNotFoundError(f"Config file '{config_file}' does not exist.")
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return {
+        'dbname': config.get('postgres', 'dbname'),
+        'user': config.get('postgres', 'user'),
+        'password': config.get('postgres', 'password'),
+        'host': config.get('postgres', 'host'),
+        'port': config.getint('postgres', 'port')
+    }
+
+config_file = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "postgresql_details/oceanomics.cfg")
+db_params = load_db_config(config_file)
 # File paths
 input_file = "stats_compiled.tsv"
 output_file = "stats_compiled_split.tsv"
@@ -35,6 +45,7 @@ for col in ['num_seqs', 'sum_len', 'min_len', 'avg_len', 'max_len']:
 # STEP 4: Parse identifiers
 df["og_id"] = df["file"].str.split('.').str[0].str.split('_').str[0]
 df["seq_date"] = df["file"].str.split('.').str[0].str.split('_').str[1].str.lstrip("v")
+df["version"] = df["file"].str.split('.').str[1]
 df["stage"] = df["file"].str.split('.').str[2].astype(int)
 df["haplotype"] = df["file"].str.split('.').str[4].str.split('_').str[0]
 
@@ -61,14 +72,14 @@ try:
 
         upsert_query = """
         INSERT INTO ref_genomes (
-            og_id, seq_date, stage, haplotype, format, "type",
+            og_id, seq_date, version, stage, haplotype, format, "type",
             num_seqs, sum_len, min_len, avg_len, max_len
         )
         VALUES (
-            %(og_id)s, %(seq_date)s, %(stage)s, %(haplotype)s, %(format)s, %(type)s,
+            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s, %(format)s, %(type)s,
             %(num_seqs)s, %(sum_len)s, %(min_len)s, %(avg_len)s, %(max_len)s
         )
-        ON CONFLICT (og_id, seq_date, stage, haplotype) DO UPDATE SET
+        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
             format = EXCLUDED.format,
             "type" = EXCLUDED."type",
             num_seqs = EXCLUDED.num_seqs,
@@ -81,6 +92,7 @@ try:
         params = {
             "og_id": row_dict["og_id"],
             "seq_date": row_dict["seq_date"],
+            "version": row_dict["version"],
             "stage": row_dict["stage"],
             "haplotype": row_dict["haplotype"],
             "format": row_dict.get("format"),

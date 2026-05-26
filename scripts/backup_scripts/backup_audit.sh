@@ -15,6 +15,7 @@ DEFAULT_SAMPLESHEET=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGeno
 DRY_RUN=0
 SAMPLESHEET=""
 OUTDIR=""
+DATADIR="/scratch/pawsey0964/lhuet/post_curation/post-curation"
 
 print_usage(){
   cat <<EOF
@@ -30,6 +31,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--dry-run) DRY_RUN=1; shift ;;
     -o|--outdir) OUTDIR="$2"; shift 2 ;;
+    --datadir) DATADIR="$2"; shift 2 ;;
     --samplesheet) SAMPLESHEET="$2"; shift 2 ;;
     --all) SAMPLESHEET="$DEFAULT_SAMPLESHEET"; shift ;;
     -h|--help) print_usage; exit 0 ;;
@@ -75,26 +77,53 @@ audit_one(){
   local OG="$1" date="$2" ver="$3"
   local asm_ver="${OG}_${date}.${ver}"
   local sample="$OG"
+  local D="${DATADIR}/${OG}"
   echo "== Audit: ${sample} / ${asm_ver} =="
+
+  # Detect curation tool (mirrors backup.sh logic)
+  local CURATION_TOOL=""
+  if [[ -d "${D}/pretext-to-asm" ]]; then
+    CURATION_TOOL="pretext-to-asm"
+  elif [[ -d "${D}/rapid-curation" ]]; then
+    CURATION_TOOL="rapid-curation"
+  else
+    echo "  ERROR: No curation output directory found in $D"
+    return 1
+  fi
+  echo "  Curation tool: $CURATION_TOOL"
+
+  # Assembly and AGP paths differ by curation tool
+  local hap1_fa hap2_fa hap1_agp_src hap2_agp_src
+  if [[ "$CURATION_TOOL" == "pretext-to-asm" ]]; then
+    hap1_fa="${D}/pretext-to-asm/${asm_ver}.3.curated.hap1.chr_level.fa"
+    hap2_fa="${D}/pretext-to-asm/${asm_ver}.3.curated.hap2.chr_level.fa"
+    hap1_agp_src="${DATADIR}/../${OG}/agp"
+    hap2_agp_src="${DATADIR}/../${OG}/agp"
+  else
+    hap1_fa="${D}/rapid-curation/Hap_1/${asm_ver}.3.curated.hap1.chr_level.fa"
+    hap2_fa="${D}/update_mapping/${asm_ver}.3.curated.hap2.chr_level.fa"
+    hap1_agp_src="${D}/rapid-curation/Hap_1/${asm_ver}.3.curated.hap1.agp"
+    hap2_agp_src="${D}/rapid-curation/Hap_2/${asm_ver}.3.curated.hap2.agp"
+  fi
 
   # list of checks: each line is "src|remote_path_suffix|label"
   checks=(
-    "${OG}/busco/|${sample}/${asm_ver}/busco|busco/"
-    "${OG}/gfastats/${asm_ver}.3.curated.hap1.assembly_summary.txt|${sample}/${asm_ver}/gfastats|gfastats_hap1_summary"
-    "${OG}/gfastats/${asm_ver}.3.curated.hap2.assembly_summary.txt|${sample}/${asm_ver}/gfastats|gfastats_hap2_summary"
-    "${OG}/merqury/|${sample}/${asm_ver}/merqury|merqury/"
-    "${OG}/update_mapping/${asm_ver}.3.curated.hap2.chr_level.fa|${sample}/${asm_ver}/assembly|assembly_hap2.fa"
-    "${OG}/rapid-curation/Hap_1/${asm_ver}.3.curated.hap1.chr_level.fa|${sample}/${asm_ver}/assembly|assembly_hap1.fa"
-    "${OG}/rapid-curation/Hap_1/${asm_ver}.3.curated.hap1.agp|${sample}/${asm_ver}/agp|agp_hap1"
-    "${OG}/rapid-curation/Hap_2/${asm_ver}.3.curated.hap2.agp|${sample}/${asm_ver}/agp|agp_hap2"
-    "${OG}/omnic_hap1|${sample}/${asm_ver}/bam/omnic_hap1|bam_omnic_hap1"
-    "${OG}/omnic_hap2|${sample}/${asm_ver}/bam/omnic_hap2|bam_omnic_hap2"
-    "${OG}/pretextmap_hap_1|${sample}/${asm_ver}/pretext/hap1|pretext_hap1"
-    "${OG}/pretextmap_hap_2|${sample}/${asm_ver}/pretext/hap2|pretext_hap2"
-    "${OG}/pretextsnapshot_hap1|${sample}/${asm_ver}/pretext_snapshots/hap1|pretext_snapshot_hap1"
-    "${OG}/pretextsnapshot_hap2|${sample}/${asm_ver}/pretext_snapshots/hap2|pretext_snapshot_hap2"
-    "${OG}/calculate_stats/${asm_ver}.stats_output.txt|${sample}/${asm_ver}/stats|stats_output"
-    "${OG}/calculate_stats/${asm_ver}.percentage_stats_output.txt|${sample}/${asm_ver}/stats|percentage_stats_output"
+    "${D}/busco/|${sample}/${asm_ver}/busco|busco/"
+    "${D}/gfastats/${asm_ver}.3.curated.hap1.assembly_summary.txt|${sample}/${asm_ver}/gfastats|gfastats_hap1_summary"
+    "${D}/gfastats/${asm_ver}.3.curated.hap2.assembly_summary.txt|${sample}/${asm_ver}/gfastats|gfastats_hap2_summary"
+    "${D}/merqury/|${sample}/${asm_ver}/merqury|merqury/"
+    "${hap1_fa}|${sample}/${asm_ver}/assembly|assembly_hap1.fa"
+    "${hap2_fa}|${sample}/${asm_ver}/assembly|assembly_hap2.fa"
+    "${hap1_agp_src}|${sample}/${asm_ver}/agp|agp_hap1"
+    "${hap2_agp_src}|${sample}/${asm_ver}/agp|agp_hap2"
+    "${D}/omnic_hap1|${sample}/${asm_ver}/bam/omnic_hap1|bam_omnic_hap1"
+    "${D}/omnic_hap2|${sample}/${asm_ver}/bam/omnic_hap2|bam_omnic_hap2"
+    "${D}/pretextmap_hap_1|${sample}/${asm_ver}/pretext/hap1|pretext_hap1"
+    "${D}/pretextmap_hap_2|${sample}/${asm_ver}/pretext/hap2|pretext_hap2"
+    "${D}/pretextsnapshot_hap1|${sample}/${asm_ver}/pretext_snapshots/hap1|pretext_snapshot_hap1"
+    "${D}/pretextsnapshot_hap2|${sample}/${asm_ver}/pretext_snapshots/hap2|pretext_snapshot_hap2"
+    "${D}/calculate_stats/${asm_ver}.stats_output.txt|${sample}/${asm_ver}/stats|stats_output"
+    "${D}/calculate_stats/${asm_ver}.percentage_stats_output.txt|${sample}/${asm_ver}/stats|percentage_stats_output"
   )
 
   failures=0

@@ -32,13 +32,13 @@ RCLONE_FLAGS="${RCLONE_FLAGS:-}"
 clean() { printf '%s' "$1" | tr -d '\r' | xargs; }
 
 MERYL_BUCKET="${MERYL_BUCKET:?Missing MERYL_BUCKET in config}"
-
-# Optional matching knobs (default like your config)
 MERYL_REQUIRED_SUBSTR_1="${MERYL_REQUIRED_SUBSTR_1:-meryl}"
 MERYL_REQUIRED_SUBSTR_2="${MERYL_REQUIRED_SUBSTR_2:-tar.gz}"
+NPROC="${NPROC:-4}"
 
 tmp="$(mktemp)"
-trap 'rm -f "$tmp" "${tmp}.matched" 2>/dev/null || true' EXIT
+tmp_pairs="$(mktemp)"
+trap 'rm -f "$tmp" "${tmp}.matched" "$tmp_pairs" 2>/dev/null || true' EXIT
 
 declare -A MERYL_DIR
 samples=()
@@ -54,42 +54,48 @@ done < <(awk -F, 'NR>1{ gsub(/\r/,"",$1); gsub(/\r/,"",$4); print $1 "\t" $4 }' 
 
 [[ ${#samples[@]} -gt 0 ]] || { echo "No samples found in $SAMPLESHEET" >&2; exit 1; }
 
+# Build remote_path <TAB> local_dir pairs for all samples
 for s in "${samples[@]}"; do
-  base="${MERYL_DIR[$s]:-}"
-  [[ -n "$base" ]] || { echo "Error: no meryldb entry for ${s} in samplesheet" >&2; exit 1; }
-
-  # We will untar into: <base>/meryldb
-  outdir="${base%/}"
+  outdir="${MERYL_DIR[$s]:-}"
+  [[ -n "$outdir" ]] || { echo "Error: no meryldb entry for ${s}" >&2; exit 1; }
   mkdir -p "$outdir"
 
-  # list remote paths under sample
   rclone lsf --recursive ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${MERYL_BUCKET}/${s}" > "$tmp" 2>/dev/null || true
-
-  # filter for meryl tarballs
-  grep -i "$MERYL_REQUIRED_SUBSTR_1" "$tmp" | \
-    grep -i "$MERYL_REQUIRED_SUBSTR_2" > "${tmp}.matched" || true
+  grep -i "$MERYL_REQUIRED_SUBSTR_1" "$tmp" | grep -i "$MERYL_REQUIRED_SUBSTR_2" > "${tmp}.matched" || true
 
   if [[ ! -s "${tmp}.matched" ]]; then
-    echo "Error: no matching MERYL tarball found for ${s} on remote ${MERYL_BUCKET}/${s}" >&2
-    exit 1
+    echo "Error: no meryl tarball found for ${s} on ${MERYL_BUCKET}/${s}" >&2; exit 1
   fi
 
   while IFS= read -r relpath; do
     relpath="$(clean "$relpath")"
     [[ -z "$relpath" ]] && continue
-
-    fname="$(basename "$relpath")"
-    local_tar="${outdir%/}/${fname}"
-
-    echo "Downloading ${MERYL_BUCKET}/${s}/${relpath} -> ${local_tar}"
-    rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${MERYL_BUCKET}/${s}/${relpath}" "${outdir}/"
-
-    echo "Extracting ${local_tar} -> ${outdir}/"
-    tar -xzf "${local_tar}" -C "${outdir}"
-
-    # Optional: delete tarball after extraction to save space
-    rm -f "${local_tar}"
+    printf '%s\t%s\n' "${MERYL_BUCKET}/${s}/${relpath}" "$outdir"
   done < "${tmp}.matched"
-done
+done > "$tmp_pairs"
+
+# Download all tarballs in parallel
+total=$(wc -l < "$tmp_pairs")
+echo "Downloading ${total} meryl tarballs (NPROC=${NPROC})..."
+running=0
+while IFS=$'\t' read -r src dst; do
+  echo "  Downloading $(basename "$src") -> $dst/"
+  rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "$src" "$dst/" &
+  running=$((running + 1))
+  if (( running >= NPROC )); then
+    wait -n 2>/dev/null || wait
+    running=$((running - 1))
+  fi
+done < "$tmp_pairs"
+wait
+
+# Extract all tarballs (sequential — avoids competing I/O during decompression)
+while IFS=$'\t' read -r src dst; do
+  arc="${dst}/$(basename "$src")"
+  [[ -f "$arc" ]] || continue
+  echo "Extracting $(basename "$arc") -> $dst/"
+  tar -xzf "$arc" -C "$dst"
+  rm -f "$arc"
+done < "$tmp_pairs"
 
 echo "Done."

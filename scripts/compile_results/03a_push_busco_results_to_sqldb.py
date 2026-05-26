@@ -1,18 +1,27 @@
 import psycopg2
 import pandas as pd
-import numpy as np  # Required for handling infinity values
+import numpy as np
+import configparser
+import sys
+from pathlib import Path
 
-#run with singularity run $SING/psycopg2:0.1.sif python 03a_push_busco_results_to_sqldb.py
- 
+#run with singularity run $SING/psycopg2:0.1.sif python 03a_push_busco_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg
 
-# PostgreSQL connection parameters
-db_params = {
-    'dbname': 'oceanomics_genomes',
-    'user': 'postgres',
-    'password': 'oceanomics',
-    'host': '131.217.178.144',
-    'port': 5432
-}
+def load_db_config(config_file):
+    if not Path(config_file).exists():
+        raise FileNotFoundError(f"Config file '{config_file}' does not exist.")
+    config = configparser.ConfigParser()
+    config.read(config_file)
+    return {
+        'dbname': config.get('postgres', 'dbname'),
+        'user': config.get('postgres', 'user'),
+        'password': config.get('postgres', 'password'),
+        'host': config.get('postgres', 'host'),
+        'port': config.getint('postgres', 'port')
+    }
+
+config_file = sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / "postgresql_details/oceanomics.cfg")
+db_params = load_db_config(config_file)
 
 
 
@@ -29,11 +38,25 @@ busco = pd.read_csv(BUSCO_compiled_path, sep="\t")
 # Split the 'sample' column up so we have og_id, seq_date, stage and haplotype
 # Ensure 'sample' column exists
 if 'sample' in busco.columns:
-    # Split 'sample' into 4 new columns
-    busco['og_id'] = busco['sample'].str.split('.').str[0].str.split('_').str[0]
-    busco['seq_date'] = busco['sample'].str.split('.').str[0].str.split('_').str[1].str.lstrip('v')
-    busco['stage'] = busco['sample'].str.split('.').str[2].astype(int)
-    busco['haplotype'] = busco['sample'].str.split('.').str[4].str.split('_').str[0]
+    def parse_sample(sample):
+        parts = sample.split('.')
+        og_date = parts[0]
+        og_id = og_date.split('_')[0]
+        seq_date = og_date.split('_')[1].lstrip('v')
+        if 'chr_level' in sample:
+            # pretext-to-asm hap2: OG100_v240116.hic2_hap2.chr_level.fa
+            version = parts[1].split('_')[0]
+            stage = 3
+            haplotype = 'hap2'
+        else:
+            # standard: OG100_v240116.hic2.3.curated.hap1/hap2
+            version = parts[1]
+            stage = int(parts[2])
+            haplotype = parts[4].split('_')[0]
+        return pd.Series({'og_id': og_id, 'seq_date': seq_date, 'version': version, 'stage': stage, 'haplotype': haplotype})
+
+    parsed = busco['sample'].apply(parse_sample)
+    busco = pd.concat([busco, parsed], axis=1)
 
 
     # Save the updated DataFrame back to a tab-delimited file
@@ -65,15 +88,15 @@ try:
         # UPSERT: Insert if not exists, otherwise update
         upsert_query = """
         INSERT INTO ref_genomes (
-            og_id, seq_date, stage, haplotype, dataset, complete, single_copy, multi_copy, fragmented,
+            og_id, seq_date, version, stage, haplotype, dataset, complete, single_copy, multi_copy, fragmented,
             missing, n_markers, internal_stop_codon_percent, scaffold_n50_bus, contigs_n50_bus, percent_gaps, number_of_scaffolds
         )
         VALUES (
-            %(og_id)s, %(seq_date)s, %(stage)s, %(haplotype)s, %(dataset)s, %(complete)s, %(single_copy)s, %(multi_copy)s, %(fragmented)s,
-            %(missing)s, %(n_markers)s, %(internal_stop_codon_percent)s, %(scaffold_n50_bus)s, %(contigs_n50_bus)s, %(percent_gaps)s,  
+            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s, %(dataset)s, %(complete)s, %(single_copy)s, %(multi_copy)s, %(fragmented)s,
+            %(missing)s, %(n_markers)s, %(internal_stop_codon_percent)s, %(scaffold_n50_bus)s, %(contigs_n50_bus)s, %(percent_gaps)s,
             %(number_of_scaffolds)s
         )
-        ON CONFLICT (og_id, seq_date, stage, haplotype) DO UPDATE SET
+        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
             dataset = EXCLUDED.dataset,
             complete = EXCLUDED.complete,
             single_copy = EXCLUDED.single_copy,
@@ -88,11 +111,12 @@ try:
             number_of_scaffolds = EXCLUDED.number_of_scaffolds;
         """
         params = {
-            "og_id": row_dict["og_id"],  # TEXT / VARCHAR
-            "seq_date": row_dict["seq_date"],  # TEXT or DATE
-            "stage": row_dict["stage"],  # TEXT or DATE
-            "haplotype": row_dict["haplotype"],  # TEXT or DATE
-            "dataset": row_dict["dataset"],  # TEXT or DATE
+            "og_id": row_dict["og_id"],
+            "seq_date": row_dict["seq_date"],
+            "version": row_dict["version"],
+            "stage": row_dict["stage"],
+            "haplotype": row_dict["haplotype"],
+            "dataset": row_dict["dataset"],
             "complete": float(row_dict["complete"]) if row_dict["complete"] not in [None, ""] else None,  # FLOAT
             "single_copy": float(row_dict["single_copy"]) if row_dict["single_copy"] not in [None, ""] else None,  # FLOAT
             "multi_copy": float(row_dict["multi_copy"]) if row_dict["multi_copy"] not in [None, ""] else None,  # FLOAT

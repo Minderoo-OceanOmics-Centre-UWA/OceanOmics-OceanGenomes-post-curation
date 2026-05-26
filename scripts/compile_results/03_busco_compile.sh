@@ -4,8 +4,8 @@ output_file="BUSCO_compiled_results.tsv"
 base_dir="/scratch/pawsey0964/lhuet/post_curation/post-curation/OG*"
 echo -e "sample\tdataset\tcomplete\tsingle_copy\tmulti_copy\tfragmented\tmissing\tn_markers\tinternal_stop_codon_percent\tscaffold_n50_bus\tcontigs_n50_bus\tpercent_gaps\tnumber_of_scaffolds" > "$output_file"
 
-# Find all .hic1-busco.batch_summary.txt files
-tsv_files=$(find $base_dir -name "*.hic1-busco.batch_summary.txt")
+# Find all busco batch summary files (hic1, hic2, etc.)
+tsv_files=$(find $base_dir -name "*-busco.batch_summary.txt")
 
 # Process and clean each file
 for file in $tsv_files; do
@@ -13,10 +13,10 @@ for file in $tsv_files; do
 
     trimmed_sample=$(echo "$sample" | xargs)
 
-    if [[ "$trimmed_sample" =~ ^(OG[0-9]+_v[0-9]+)\.hic1_hap1\.chr_level\.fa$ ]]; then
-        new_sample="${BASH_REMATCH[1]}.hic1.3.curated.hap1"
-    elif [[ "$trimmed_sample" =~ ^(OG[0-9]+_v[0-9]+)\.hic1\.hap2\.chr_level_new\.fa$ ]]; then
-        new_sample="${BASH_REMATCH[1]}.hic1.3.curated.hap2"
+    if [[ "$trimmed_sample" =~ ^(OG[0-9]+_v[0-9]+)\.(hic[0-9]+)_hap1\.chr_level\.fa$ ]]; then
+        new_sample="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.3.curated.hap1"
+    elif [[ "$trimmed_sample" =~ ^(OG[0-9]+_v[0-9]+)\.(hic[0-9]+)\.hap2\.chr_level_new\.fa$ ]]; then
+        new_sample="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.3.curated.hap2"
     else
         echo "⚠️ Could not match: $trimmed_sample" >&2
         new_sample="$trimmed_sample"

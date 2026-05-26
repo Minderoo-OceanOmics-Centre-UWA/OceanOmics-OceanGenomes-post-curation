@@ -33,9 +33,11 @@ clean() { printf '%s' "$1" | tr -d '\r' | xargs; }
 
 ASSEMBLY_BUCKET="${ASSEMBLY_BUCKET:?Missing ASSEMBLY_BUCKET in config}"
 ASSEMBLY_GLOB_SUFFIX="${ASSEMBLY_GLOB_SUFFIX:-curated.hap1.chr_level.fa}"
+NPROC="${NPROC:-4}"
 
 tmp_list="$(mktemp)"
-trap 'rm -f "$tmp_list"' EXIT
+tmp_pairs="$(mktemp)"
+trap 'rm -f "$tmp_list" "$tmp_pairs"' EXIT
 
 declare -A ASSEMBLY_DIR
 samples=()
@@ -51,11 +53,13 @@ done < <(awk -F, 'NR>1 { gsub(/\r/,"",$1); gsub(/\r/,"",$3); print $1 "\t" $3 }'
 
 [[ ${#samples[@]} -gt 0 ]] || { echo "No samples found in $SAMPLESHEET" >&2; exit 1; }
 
+for s in "${samples[@]}"; do mkdir -p "${ASSEMBLY_DIR[$s]}"; done
+
 include=()
 for s in "${samples[@]}"; do include+=( --include "${s}*${ASSEMBLY_GLOB_SUFFIX}*" ); done
-
 rclone ls "$ASSEMBLY_BUCKET" ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${include[@]}" > "$tmp_list"
 
+# Build remote_path <TAB> local_dir pairs
 while IFS= read -r line || [[ -n "$line" ]]; do
   path="$(printf '%s' "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//; s/\r$//')"
   og="$(printf '%s' "$path" | grep -o -m1 -E 'OG[0-9]+' || true)"
@@ -67,7 +71,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     for s in "${samples[@]}"; do
       if [[ "$path" == *"$s"* ]]; then
         target="${ASSEMBLY_DIR[$s]}"
-        og="$s"
         break
       fi
     done
@@ -78,9 +81,21 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     echo "Warning: no assembly dir for remote path; falling back to ${target}" >&2
   fi
 
-  mkdir -p "$target"
-  echo "Copying ${ASSEMBLY_BUCKET}/${path} -> ${target}/"
-  rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${ASSEMBLY_BUCKET}/${path}" "${target}/"
-done < "$tmp_list"
+  printf '%s\t%s\n' "${ASSEMBLY_BUCKET}/${path}" "$target"
+done < "$tmp_list" > "$tmp_pairs"
+
+total=$(wc -l < "$tmp_pairs")
+echo "Copying ${total} assembly files (NPROC=${NPROC})..."
+running=0
+while IFS=$'\t' read -r src dst; do
+  echo "  $(basename "$src") -> $dst/"
+  rclone copy ${RCLONE_FLAGS:+$RCLONE_FLAGS} "$src" "$dst/" &
+  running=$((running + 1))
+  if (( running >= NPROC )); then
+    wait -n 2>/dev/null || wait
+    running=$((running - 1))
+  fi
+done < "$tmp_pairs"
+wait
 
 echo "Done."

@@ -21,32 +21,36 @@ calculate_percentage() {
     echo $percentage
 }
 
+# Derive basenames to match seqkit stats output (pretext-to-asm names hap2 without _new)
+hap1_basename=$(basename "$hap1")
+hap2_basename=$(basename "$hap2")
+
 # Extract sum_len values for hap1
-hap1_super_sum_len=$(awk '$1 ~ /hap1.super.fa/ {print $5}' $input_file)
-hap1_chr_level_sum_len=$(awk '$1 ~ /hap1.chr_level.fa/ {print $5}' $input_file)
+hap1_super_sum_len=$(awk '$1 ~ /hap1_super.fa/ {print $5}' $input_file)
+hap1_chr_level_sum_len=$(awk -v fn="$hap1_basename" '$1 ~ fn {print $5}' $input_file)
 hap1_no_super_sum_len=$(awk '$1 ~ /hap1.no_super.fa/ {print $5}' $input_file)
 
 # Calculate percentage for hap1
 hap1_percentage=$(calculate_percentage $(remove_commas $hap1_super_sum_len) $(remove_commas $hap1_chr_level_sum_len))
 hap1_no_super_percentage=$(calculate_percentage $(remove_commas $hap1_no_super_sum_len) $(remove_commas $hap1_chr_level_sum_len))
 
-# Extract sum_len values for hap2
-hap2_super_sum_len=$(awk '$1 ~ /hap2.super.fa/ {print $5}' $input_file)
-hap2_chr_level_sum_len=$(awk '$1 ~ /hap2.chr_level/ && $1 !~ /super/ {print $5}' $input_file)
+# Extract sum_len values for hap2 (pretext-to-asm: hap2.chr_level.fa, not hap2.chr_level_new.fa)
+hap2_super_sum_len=$(awk '$1 ~ /hap2_super.fa/ {print $5}' $input_file)
+hap2_chr_level_sum_len=$(awk -v fn="$hap2_basename" '$1 ~ fn {print $5}' $input_file)
 hap2_no_super_sum_len=$(awk '$1 ~ /hap2.no_super.fa/ {print $5}' $input_file)
 
 # Calculate percentage for hap2
 hap2_percentage=$(calculate_percentage $(remove_commas $hap2_super_sum_len) $(remove_commas $hap2_chr_level_sum_len))
 hap2_no_super_percentage=$(calculate_percentage $(remove_commas $hap2_no_super_sum_len) $(remove_commas $hap2_chr_level_sum_len))
 
-# Extract num_seqs and max_len values for hap1 and hap2 from the input file
+# Extract num_seqs and max_len values from the input file
 hap1_num_seqs=$(awk '$1 ~ /hap1.no_super.fa/ {print $4}' $input_file)
 hap1_max_len=$(awk '$1 ~ /hap1.no_super.fa/ {print $8}' $input_file)
 
 hap2_num_seqs=$(awk '$1 ~ /hap2.no_super.fa/ {print $4}' $input_file)
 hap2_max_len=$(awk '$1 ~ /hap2.no_super.fa/ {print $8}' $input_file)
 
-# Record number of chromosomes (no unlocs)
+# Record number of chromosomes (no unlocs) — pretext-to-asm uses SUPER_ naming
 hap1_nchr=$(grep '>SUPER_' $hap1 | grep -v 'unloc' | wc -l)
 hap2_nchr=$(grep '>SUPER_' $hap2 | grep -v 'unloc' | wc -l)
 

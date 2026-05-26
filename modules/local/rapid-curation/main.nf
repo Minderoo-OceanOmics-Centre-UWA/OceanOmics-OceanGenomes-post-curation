@@ -7,7 +7,7 @@ process RAPID_CURATION {
     //container  "docker.io/sawtooth01/og_curation_agp:v0.1"
 
     input:
-    tuple val(meta), path(fasta), path(agp, stageAs: 'agp')
+    tuple val(meta), path(fasta), path(agp, stageAs: 'agp_input')
 
     output:
     tuple val(meta), path("Hap_1"), emit: hap1_dir
@@ -23,7 +23,9 @@ process RAPID_CURATION {
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
 
-    bash ${moduleDir}/curation_2.0_pipe.sh -f ${fasta}/* -a ${agp}/*
+    fasta_file=\$(ls ${fasta}/ | grep -E '\\.fa(\\.gz)?\$' | head -1)
+    agp_file=\$(ls agp_input/)
+    bash ${moduleDir}/curation_2.0_pipe.sh -f ${fasta}/\${fasta_file} -a agp_input/\${agp_file}
 
     # Rename the chr_level.fa files
     if [ -f Hap_1/hap.chr_level.fa ]; then

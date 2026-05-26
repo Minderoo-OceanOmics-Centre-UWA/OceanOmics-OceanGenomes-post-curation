@@ -4,6 +4,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+include { PRETEXT_TO_ASM            } from '../modules/local/pretext-to-asm/main'
 include { RAPID_CURATION            } from '../modules/local/rapid-curation/'
 include { MASHMAP                   } from '../modules/nf-core/mashmap/main'
 include { UPDATE_MAPPING            } from '../modules/local/update-mapping'
@@ -12,6 +13,7 @@ include { MERQURY_MERQURY           } from '../modules/nf-core/merqury/merqury/m
 include { GFASTATS as GFASTATS_HAP1 } from '../modules/nf-core/gfastats/main'
 include { GFASTATS as GFASTATS_HAP2 } from '../modules/nf-core/gfastats/main'
 include { CALCULATE_STATS           } from '../modules/local/calculate_stats/main'
+include { CALCULATE_STATS_PRETEXT   } from '../modules/local/calculate_stats_pretext/main'
 include { CAT_HIC                   } from '../modules/local/cat_hic/main'
 include { OMNIC as OMNIC_HAP1       } from '../modules/local/omnic/main'
 include { OMNIC as OMNIC_HAP2       } from '../modules/local/omnic/main'
@@ -86,44 +88,34 @@ workflow POSTCURATION {
     }
 
     //
-    // MODULE: Run curation_pipe
+    // MODULE: Split haplotypes and assign chromosome names
     //
-    // Create a channel with AGP and assembly files
-
     agp_assembly_ch = ch_assembly.join(ch_agp)
-    .map {
-        meta, assembly, agp -> 
-        return [meta, assembly, agp]
+        .map { meta, assembly, agp -> [meta, assembly, agp] }
+
+    if (params.curation_tool == 'rapid-curation') {
+        RAPID_CURATION(agp_assembly_ch)
+
+        ch_haplotypes = RAPID_CURATION.out.hap1.join(RAPID_CURATION.out.hap2)
+        MASHMAP(ch_haplotypes)
+        ch_versions = ch_versions.mix(MASHMAP.out.versions.first())
+
+        UPDATE_MAPPING(RAPID_CURATION.out.hap2.join(MASHMAP.out.hap2_hap1_ID))
+        ch_versions = ch_versions.mix(UPDATE_MAPPING.out.versions.first())
+
+        ch_hap1 = RAPID_CURATION.out.hap1
+        ch_hap2 = UPDATE_MAPPING.out.hap2_new
+    } else {
+        // pretext-to-asm (default)
+        PRETEXT_TO_ASM(agp_assembly_ch)
+        ch_versions = ch_versions.mix(PRETEXT_TO_ASM.out.versions.first())
+
+        ch_hap1 = PRETEXT_TO_ASM.out.hap1
+        ch_hap2 = PRETEXT_TO_ASM.out.hap2
     }
 
-    RAPID_CURATION (agp_assembly_ch)
-
-    //
-    // MODULE: Run mashmap 
-    //
-
-    // Combine hap1 and hap2 outputs into a single channel
-    ch_haplotypes = RAPID_CURATION.out.hap1.join(RAPID_CURATION.out.hap2)
-
-    // Feed the combined channel into MASHMAP
-    MASHMAP(ch_haplotypes)
-    ch_versions = ch_versions.mix(MASHMAP.out.versions.first())
-
-    //
-    //MODULE: Run update mapping 
-    //
-
-    ch_mapping = RAPID_CURATION.out.hap2.join(MASHMAP.out.hap2_hap1_ID)
-
-    UPDATE_MAPPING(ch_mapping)
-    ch_versions = ch_versions.mix(MASHMAP.out.versions.first())
-
-
-    ch_busco = RAPID_CURATION.out.hap1.join(UPDATE_MAPPING.out.hap2_new)
-            .map {
-                meta, hap1, hap2_new ->
-                    return [meta, [ hap1, hap2_new] ]
-            }
+    ch_busco = ch_hap1.join(ch_hap2)
+            .map { meta, hap1, hap2 -> [meta, [hap1, hap2]] }
 
     BUSCO_BUSCO (
         ch_busco,
@@ -131,16 +123,14 @@ workflow POSTCURATION {
         params.buscodb,
         []
     )
+    ch_multiqc_files = ch_multiqc_files.mix(BUSCO_BUSCO.out.batch_summary)
 
     //
     //MODULE: Run Merqury
     //
 
-    ch_assemblies = RAPID_CURATION.out.hap1.join(UPDATE_MAPPING.out.hap2_new) 
-                .map {
-                meta, hap1, hap2_new ->
-                    return [meta, [ hap1, hap2_new] ]
-            }
+    ch_assemblies = ch_hap1.join(ch_hap2)
+        .map { meta, hap1, hap2 -> [meta, [hap1, hap2]] }
 
     ch_merqury = ch_meryldb.join(ch_assemblies)
 
@@ -148,14 +138,15 @@ workflow POSTCURATION {
         ch_merqury,
         "3.curated"
     )
-
+    ch_multiqc_files = ch_multiqc_files.mix(MERQURY_MERQURY.out.stats)
+    ch_multiqc_files = ch_multiqc_files.mix(MERQURY_MERQURY.out.assembly_qv)
 
     //
-    // MODULE: run gfastsats
+    // MODULE: run gfastats
     //
 
-    ch_gfastats_hap1_in = RAPID_CURATION.out.hap1.join(ch_genomesize)
-    ch_gfastats_hap2_in = UPDATE_MAPPING.out.hap2_new.join(ch_genomesize)
+    ch_gfastats_hap1_in = ch_hap1.join(ch_genomesize)
+    ch_gfastats_hap2_in = ch_hap2.join(ch_genomesize)
 
     GFASTATS_HAP1 (
         ch_gfastats_hap1_in,
@@ -170,7 +161,7 @@ workflow POSTCURATION {
     )
     ch_versions = ch_versions.mix(GFASTATS_HAP1.out.versions.first())
 
-        GFASTATS_HAP2 (
+    GFASTATS_HAP2 (
         ch_gfastats_hap2_in,
         "fasta",
         "",
@@ -193,36 +184,33 @@ workflow POSTCURATION {
     )
 
     ///
-    ///MODULE: Calculate stats
-    //
-// Join hap1 and hap2_new by meta to ensure same sample pairing
-    ch_calculate_stats_joined = RAPID_CURATION.out.hap1.join(UPDATE_MAPPING.out.hap2_new)
+    /// MODULE: Calculate stats
+    ///
+    ch_calculate_stats_joined = ch_hap1.join(ch_hap2)
+    ch_hap1_for_stats = ch_calculate_stats_joined.map { meta, hap1, hap2 -> [meta, hap1] }
+    ch_hap2_for_stats = ch_calculate_stats_joined.map { meta, hap1, hap2 -> [meta, hap2] }
 
-// Create separate channels for each input while maintaining pairing
-    ch_hap1_for_stats = ch_calculate_stats_joined.map { meta, hap1, hap2_new -> [meta, hap1] }
-    ch_hap2_for_stats = ch_calculate_stats_joined.map { meta, hap1, hap2_new -> [meta, hap2_new] }
+    if (params.curation_tool == 'rapid-curation') {
+        CALCULATE_STATS (
+            ch_hap1_for_stats,
+            ch_hap2_for_stats
+        )
+    } else {
+        CALCULATE_STATS_PRETEXT (
+            ch_hap1_for_stats,
+            ch_hap2_for_stats
+        )
+    }
 
-CALCULATE_STATS (
-    ch_hap1_for_stats,
-    ch_hap2_for_stats
-)
     //
     // MODULE: Run Omnic
     //
 
+    ch_omnic_hap1_in = CAT_HIC.out.cat_files.join(ch_hap1)
+        .map { meta, reads, assembly -> [meta, reads, assembly] }
 
-    ch_omnic_hap1_in = CAT_HIC.out.cat_files.join(RAPID_CURATION.out.hap1)
-        .map {
-            meta, reads, assembly ->
-                return [ meta, reads, assembly ]
-        }
-    
-    
-    ch_omnic_hap2_in = CAT_HIC.out.cat_files.join(UPDATE_MAPPING.out.hap2_new)
-        .map {
-            meta, reads, assembly ->
-                return [ meta, reads, assembly ]
-        }
+    ch_omnic_hap2_in = CAT_HIC.out.cat_files.join(ch_hap2)
+        .map { meta, reads, assembly -> [meta, reads, assembly] }
 
     OMNIC_HAP1 (
         ch_omnic_hap1_in,
@@ -269,8 +257,10 @@ CALCULATE_STATS (
     PRETEXTSNAPSHOT_HAP2 (PRETEXTMAP_HAP_2.out.pretext_map,
                     "hap2",
                     "3.curated")
-    
+
     ch_versions = ch_versions.mix(PRETEXTSNAPSHOT_HAP2.out.versions.first())
+    ch_multiqc_files = ch_multiqc_files.mix(PRETEXTSNAPSHOT_HAP1.out.image)
+    ch_multiqc_files = ch_multiqc_files.mix(PRETEXTSNAPSHOT_HAP2.out.image)
 
     //
     // Collate and save software versions
@@ -284,7 +274,7 @@ CALCULATE_STATS (
         ).set { ch_collated_versions }
 
     //
-    // MODULE: MultiQC
+    // MODULE: MultiQC (one report per OG)
     //
     ch_multiqc_config        = Channel.fromPath(
         "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
@@ -305,25 +295,23 @@ CALCULATE_STATS (
     ch_methods_description                = Channel.value(
         methodsDescriptionText(ch_multiqc_custom_methods_description))
 
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
-    ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_methods_description.collectFile(
-            name: 'methods_description_mqc.yaml',
-            sort: true
-        )
-    )
+    // Group per-sample QC files by meta, then run one MultiQC per OG
+    ch_multiqc_per_sample = ch_multiqc_files
+        .groupTuple()
+        .map { meta, files -> [ meta, files.flatten() ] }
 
     MULTIQC (
-        ch_multiqc_files.collect(),
+        ch_multiqc_per_sample,
         ch_multiqc_config.toList(),
         ch_multiqc_custom_config.toList(),
-        ch_multiqc_logo.toList()
+        ch_multiqc_logo.toList(),
+        ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml').first(),
+        ch_collated_versions.first(),
+        ch_methods_description.collectFile(name: 'methods_description_mqc.yaml', sort: true).first()
     )
 
     emit:
-    multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
+    multiqc_report = MULTIQC.out.report.toList() // channel: [ [meta, path(multiqc_report.html)], ... ]
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
 }
 
