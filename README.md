@@ -1,118 +1,134 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nf-core-postcuration_logo_dark.png">
-    <img alt="nf-core/postcuration" src="docs/images/nf-core-postcuration_logo_light.png">
-  </picture>
-</h1>
+# OceanOmics OceanGenomes Post-Curation Pipeline
 
-[![GitHub Actions CI Status](https://github.com/nf-core/postcuration/actions/workflows/ci.yml/badge.svg)](https://github.com/nf-core/postcuration/actions/workflows/ci.yml)
-[![GitHub Actions Linting Status](https://github.com/nf-core/postcuration/actions/workflows/linting.yml/badge.svg)](https://github.com/nf-core/postcuration/actions/workflows/linting.yml)[![AWS CI](https://img.shields.io/badge/CI%20tests-full%20size-FF9900?labelColor=000000&logo=Amazon%20AWS)](https://nf-co.re/postcuration/results)[![Cite with Zenodo](http://img.shields.io/badge/DOI-10.5281/zenodo.XXXXXXX-1073c8?labelColor=000000)](https://doi.org/10.5281/zenodo.XXXXXXX)
-[![nf-test](https://img.shields.io/badge/unit_tests-nf--test-337ab7.svg)](https://www.nf-test.com)
-
-[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
-[![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
-[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
-[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
-[![Launch on Seqera Platform](https://img.shields.io/badge/Launch%20%F0%9F%9A%80-Seqera%20Platform-%234256e7)](https://cloud.seqera.io/launch?pipeline=https://github.com/nf-core/postcuration)
-
-[![Get help on Slack](http://img.shields.io/badge/slack-nf--core%20%23postcuration-4A154B?labelColor=000000&logo=slack)](https://nfcore.slack.com/channels/postcuration)[![Follow on Twitter](http://img.shields.io/badge/twitter-%40nf__core-1DA1F2?labelColor=000000&logo=twitter)](https://twitter.com/nf_core)[![Follow on Mastodon](https://img.shields.io/badge/mastodon-nf__core-6364ff?labelColor=FFFFFF&logo=mastodon)](https://mstdn.science/@nf_core)[![Watch on YouTube](http://img.shields.io/badge/youtube-nf--core-FF0000?labelColor=000000&logo=youtube)](https://www.youtube.com/c/nf-core)
-
-## Introduction
-
-**nf-core/postcuration** is a bioinformatics pipeline designed to generate curated hap1/hap2 assemblies and QC, following manual genome curation in PretextView. This pipeline requires an AGP file generated from PretextView, the assembly you wish to make changes to and raw hic data. 
-
-
+A Nextflow DSL2 pipeline for QC and validation of manually curated diploid genome assemblies, developed for the [Minderoo OceanOmics Ocean Genomes Project](https://www.minderoo.org/oceanomics/).
 
 <p align="center">
     <img src="docs/images/post-curation--pipeline-overview.PNG" alt="OceanOmics Post Curation Pipeline Overview" width="100%">
 </p>
 
-1. Rapid Curation written by Nadolina Brajuka, Vertebrate Genome Laboratory
-2. Mashmap ([`MashMap`](https://github.com/marbl/MashMap))
-3. Update Mapping written by Tom Mathers, Darwin Tree of Life
-4. Busco ([`BUSCO`](https://busco.ezlab.org/))
-5. Merqury ([`Merqury`](https://github.com/marbl/merqury))
-6. Gfastats([`Gfastats`](https://github.com/vgl-hub/gfastats))
-7. Caluclate statistics written by Emma de Jong Minderoo OceanOmics
-8. Align reads to curated assembly ([`Omnic`](https://omni-c.readthedocs.io/en/latest/))
-9. Generate Pretext Maps ([`PretextMap`](https://github.com/sanger-tol/PretextMap))
-10. Generate Pretext Snapshots([`Pretext Snapshot`](https://github.com/sanger-tol/PretextSnapshot))
-11. ([`MultiQC`](http://multiqc.info/))
+## Pipeline position
 
+```
+PacBio HiFi + Hi-C reads
+  └─> OceanOmics-OceanGenomes-ref-genomes (hifi_hic mode)
+        └─> PretextMap contact map
+              └─> Manual curation in PretextView (local)
+                    └─> Export AGP file
+                          └─> THIS PIPELINE
+                                └─> Curated hap1/hap2 + QC metrics + DB push + Acacia backup
+```
 
-## Usage
+## Pipeline steps
 
-> [!NOTE]
-> If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/usage/installation) on how to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/usage/introduction#how-to-run-a-pipeline) with `-profile test` before running the workflow on actual data.
+1. **Curation** (one of two paths, set via `--curation_tool`):
+   - `rapid-curation` *(default)* — splits haplotypes from a combined-scaffolds FASTA using PretextView AGP ([Nadolina Brajuka, VGL](https://github.com/sanger-tol/rapid-curation))
+   - `pretext-to-asm` — applies AGP directly to pre-split hap1/hap2 assemblies
+2. **MashMap** — maps hap2 back to hap1 to establish sequence identity
+3. **Update Mapping** — updates hap2 sequence IDs to match hap1 nomenclature ([Tom Mathers, DToL](https://www.darwintreeoflife.org/))
+4. **BUSCO** — genome completeness assessment (`--miniprot`)
+5. **Merqury** — k-mer QV and completeness using a pre-built Meryl database
+6. **gfastats** — assembly statistics (N50, L50, contig counts, GC%)
+7. **Calculate Stats** — percentage of sequences assigned to chromosomes
+8. **Cat HiC** — concatenates Hi-C FASTQ pairs if multiple libraries exist
+9. **Omnic** (×2) — maps Hi-C reads to hap1 and hap2 (`bwa mem` + `pairtools` + `samtools`)
+10. **PretextMap** (×2) — generates Hi-C contact maps from BAM
+11. **PretextSnapshot** (×2) — PNG snapshots of contact maps
+12. **MultiQC** — aggregates all QC into a single HTML report
 
+## Running on Pawsey (Setonix)
 
-First, prepare a samplesheet with your input data that looks as follows:
+For full instructions including data staging, samplesheet generation, post-pipeline DB push, and Acacia backup, see:
 
-`samplesheet.csv`:
+- **[docs/pawsey_automated_run.md](docs/pawsey_automated_run.md)** — recommended: end-to-end automated run guide
+- **[docs/oceanomics_pawsey_usage.md](docs/oceanomics_pawsey_usage.md)** — detailed step-by-step reference
+
+### Quick start
+
+```bash
+# 1. Set OG IDs in the config
+nano scripts/postcuration_pipeline.conf   # update OG_IDS=OG696,OG775,...
+
+# 2. Stage input data (generates samplesheet + downloads HiC, assembly, meryl from Acacia)
+bash scripts/stage_all.sh
+
+# 3. Transfer AGP files from your local machine into each OG's agp/ directory
+scp OG*_v*.hic*.agp* lhuet@setonix.pawsey.org.au:/scratch/pawsey0964/lhuet/post_curation/
+
+# 4. Run the pipeline (Nextflow + compile + DB push + Acacia backup)
+tmux new-session -s post_curation
+bash scripts/postcuration_run.sh
+```
+
+## Samplesheet
 
 ```csv
 sample,hic_dir,assembly,meryldb,agp,version,date,genomesize
-OG47,/path/to/hic/reads/,/path/to/assembly/,/path/to/meryl/database/OG47.meryl,/path/to/agp/file,hic1,v231115,637904034
+OG696,/path/to/OG696/hic,/path/to/OG696/assembly,/path/to/OG696/meryl,/path/to/OG696/agp,hic1,v240228,1375723817
 ```
 
-Each row represents sample. All fields are mandatory, the hic_dir, assembly, merlydb and agp columns must point to a directory that contains the corrosponding file(s). 
+| Column | Description |
+|--------|-------------|
+| `sample` | OG identifier (e.g. `OG696`) |
+| `hic_dir` | Directory containing Hi-C FASTQ files |
+| `assembly` | Directory containing the combined-scaffolds FASTA |
+| `meryldb` | Directory containing the pre-built Meryl k-mer database |
+| `agp` | Directory containing the AGP file exported from PretextView |
+| `version` | Hi-C library version (e.g. `hic1`, `hic2`) |
+| `date` | PacBio sequencing date as `vYYMMDD` (e.g. `v240228`) |
+| `genomesize` | Estimated genome size in bp (from GenomeScope) |
 
--->
+The samplesheet is generated automatically by `scripts/stage_all.sh` from the OceanOmics PostgreSQL database.
 
-Now, you can run the pipeline using:
-
+## Running manually (generic)
 
 ```bash
 nextflow run main.nf \
-  --profile singularity \
+  -profile singularity \
   --input assets/samplesheet.csv \
-  --buscodb /path/to/busco_db/ \
+  --buscodb /path/to/busco_db/actinopterygii_odb10 \
   --binddir /scratch \
-  --outdir  \
+  --outdir /path/to/outdir \
   -c pawsey_profile.config \
   -resume \
-  --tempdir $MYSCRATCH
-
+  --tempdir /path/to/tmp \
+  --curation_tool rapid-curation
 ```
 
-Note, there is a nextflow_run.sh script in the repo that loads the nextflow module for running on pawsey. Fill out the feilds in this script to run the pipeline
+Key parameters:
 
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--input` | Samplesheet CSV path | required |
+| `--buscodb` | BUSCO lineage database path | required |
+| `--curation_tool` | `rapid-curation` or `pretext-to-asm` | `rapid-curation` |
+| `--outdir` | Results output directory | required |
+| `--binddir` | Singularity bind path (must cover all input paths) | `/scratch` |
+| `--tempdir` | Temp dir for pairtools sort (needs ~100 GB free) | required |
 
-> [!WARNING]
-> Please provide pipeline parameters via the CLI or Nextflow `-params-file` option. Custom config files including those provided by the `-c` Nextflow option can be used to provide any configuration _**except for parameters**_;
-> see [docs](https://nf-co.re/usage/configuration#custom-configuration-files).
+## Outputs
 
-For more details and further functionality, please refer to the [usage documentation](https://nf-co.re/postcuration/usage) and the [parameter documentation](https://nf-co.re/postcuration/parameters).
+Results are written to `--outdir/post-curation/<sample>/`:
 
-## Pipeline output
-
-To see the results of an example test run with a full size dataset refer to the [results](https://nf-co.re/postcuration/results) tab on the nf-core website pipeline page.
-For more details about the output files and reports, please refer to the
-[output documentation](https://nf-co.re/postcuration/output).
+| Directory | Contents |
+|-----------|----------|
+| `rapid-curation/` or `pretext-to-asm/` | Curated hap1 and hap2 chromosome-level FASTAs + AGPs |
+| `update_mapping/` | hap2 with sequence IDs updated to match hap1 |
+| `busco/` | BUSCO completeness results |
+| `merqury/` | QV scores and k-mer completeness |
+| `gfastats/` | Assembly statistics (N50, L50, GC%) |
+| `calculate_stats/` | % sequences assigned to chromosomes |
+| `omnic_hap1/` `omnic_hap2/` | Hi-C BAM files |
+| `pretextmap_hap_1/` `pretextmap_hap_2/` | PretextMap contact maps |
+| `pretextsnapshot_hap1/` `pretextsnapshot_hap2/` | PNG contact map snapshots |
+| `multiqc/` | Aggregated MultiQC HTML report |
 
 ## Credits
 
-nf-core/postcuration was originally written by Lauren Huet.
+Developed by Lauren Huet, Minderoo OceanOmics.
 
-We thank the following people for their extensive assistance in the development of this pipeline:
+This pipeline incorporates:
+- [Rapid Curation](https://github.com/sanger-tol/rapid-curation) by Nadolina Brajuka (Vertebrate Genome Laboratory)
+- Update Mapping scripts by Tom Mathers (Darwin Tree of Life)
+- Calculate Statistics by Emma de Jong (Minderoo OceanOmics)
 
-This workflow makes use of scripts written by Tom Mathers from the Darwin Tree of Life program (hap2_hap1_ID_mapping.sh and update_mapping.rb), and the Rapid Curation pipeline written by Nadolina Brajuka from the Vertebrate Genome Laboratory.
-
-## Contributions and Support
-
-If you would like to contribute to this pipeline, please see the [contributing guidelines](.github/CONTRIBUTING.md).
-
-For further information or help, don't hesitate to get in touch on the [Slack `#postcuration` channel](https://nfcore.slack.com/channels/postcuration) (you can join with [this invite](https://nf-co.re/join/slack)).
-
-## Citations
-
-
-An extensive list of references for the tools used by the pipeline can be found in the [`CITATIONS.md`](CITATIONS.md) file.
-
-You can cite the `nf-core` publication as follows:
-
-> **The nf-core framework for community-curated bioinformatics pipelines.**
->
-> Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
->
-> _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
+Built on the [nf-core](https://nf-co.re/) framework.
