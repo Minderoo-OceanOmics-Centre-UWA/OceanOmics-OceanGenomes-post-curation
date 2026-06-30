@@ -8,9 +8,16 @@ process PRETEXT_TO_ASM {
     tuple val(meta), path(assembly_dir), path(agp_dir, stageAs: 'agp')
 
     output:
-    tuple val(meta), path("${meta.id}_hap1.chr_level.fa"), emit: hap1
-    tuple val(meta), path("${meta.id}_hap2.chr_level.fa"), emit: hap2
-    path "versions.yml",                                   emit: versions
+    tuple val(meta), path("${meta.id}_hap1.chr_level.fa"),              emit: hap1
+    tuple val(meta), path("${meta.id}_hap2.chr_level.fa"),              emit: hap2
+    tuple val(meta), path("assembly.chr_report.csv"),                   emit: chr_report
+    tuple val(meta), path("assembly.hap1.1.primary.chromosome.list.csv"), emit: hap1_chr_list
+    tuple val(meta), path("assembly.hap2.1.primary.chromosome.list.csv"), emit: hap2_chr_list
+    tuple val(meta), path("assembly.hap1.1.primary.curated.agp"),       emit: hap1_agp
+    tuple val(meta), path("assembly.hap2.1.primary.curated.agp"),       emit: hap2_agp
+    tuple val(meta), path("assembly.info.yaml"),                        emit: info
+    tuple val(meta), path("assembly.log"),                              emit: log
+    path "versions.yml",                                                emit: versions
 
     when:
     task.ext.when == null || task.ext.when
@@ -40,6 +47,13 @@ process PRETEXT_TO_ASM {
     """
     touch ${prefix}_hap1.chr_level.fa
     touch ${prefix}_hap2.chr_level.fa
+    touch assembly.chr_report.csv
+    touch assembly.hap1.1.primary.chromosome.list.csv
+    touch assembly.hap2.1.primary.chromosome.list.csv
+    touch assembly.hap1.1.primary.curated.agp
+    touch assembly.hap2.1.primary.curated.agp
+    touch assembly.info.yaml
+    touch assembly.log
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

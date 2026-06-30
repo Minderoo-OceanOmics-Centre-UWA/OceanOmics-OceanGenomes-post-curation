@@ -4,8 +4,8 @@ export NXF_HOME=$MYSCRATCH/.nextflow
 # Override Singularity cache directory variables
 unset SINGULARITY_CACHEDIR
 unset NXF_SINGULARITY_CACHEDIR
-export SINGULARITY_CACHEDIR=/scratch/pawsey0964/lhuet/cache
-export NXF_SINGULARITY_CACHEDIR=/scratch/pawsey0964/lhuet/cache
+export SINGULARITY_CACHEDIR=/scratch/pawsey0964/$USER/cache
+export NXF_SINGULARITY_CACHEDIR=/scratch/pawsey0964/$USER/cache
 
 # Debugging: Print cache paths to verify
 echo "SINGULARITY_CACHEDIR is set to: $SINGULARITY_CACHEDIR"

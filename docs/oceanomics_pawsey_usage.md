@@ -31,7 +31,9 @@ PacBio HiFi + Hi-C reads
 - PostgreSQL credentials at `~/postgresql_details/oceanomics.cfg`
 - Singularity image: `$SING/psycopg2:0.1.sif` (`$SING=/software/projects/pawsey0964/singularity`)
 - AGP files exported from PretextView on your local machine (one per OG)
-- Pipeline cloned to: `/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/`
+- Pipeline cloned to: `/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/`
+
+> **Working directory convention:** every command in this guide assumes you work from `/scratch/pawsey0964/$USER/post_curation/`, with the pipeline repo cloned inside it and `STAGING_BASE_DIR` (in `postcuration_pipeline.conf`) set to the same base. Pipeline outputs then land in `/scratch/pawsey0964/$USER/post_curation/post-curation/OG*/`. Stick to this layout unless you have a reason to deviate — all scripts in this guide assume it.
 
 ---
 
@@ -40,7 +42,7 @@ PacBio HiFi + Hi-C reads
 Edit the pipeline config file to set the OG IDs you want to process:
 
 ```bash
-nano /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts/postcuration_pipeline.conf
+nano /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/scripts/postcuration_pipeline.conf
 ```
 
 Update `OG_IDS` to a comma-separated list:
@@ -53,7 +55,7 @@ Other key settings in this file:
 
 | Key | Description |
 |-----|-------------|
-| `STAGING_BASE_DIR` | Root dir where per-OG data is staged (e.g. `/scratch/pawsey0964/lhuet/post_curation`) |
+| `STAGING_BASE_DIR` | Root dir where per-OG data is staged (e.g. `/scratch/pawsey0964/$USER/post_curation`) |
 | `HIC_BUCKET` | rclone remote for Hi-C reads |
 | `ASSEMBLY_BUCKET` | rclone remote for assemblies + meryl |
 | `ASSEMBLY_GLOB_SUFFIX` | Filename suffix used to find the correct assembly FASTA |
@@ -67,7 +69,7 @@ The samplesheet is generated automatically from the OceanOmics PostgreSQL databa
 
 ```bash
 SING=/software/projects/pawsey0964/singularity
-SCRIPTS=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts
+SCRIPTS=/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/scripts
 
 singularity run $SING/psycopg2:0.1.sif python \
   $SCRIPTS/0_create_samplesheet/create_samplesheet_from_config.py \
@@ -106,13 +108,13 @@ Submits one job per OG — all OGs download in parallel, with parallel per-file 
 ```bash
 # First check the array size matches your OG count
 # (0-6 = 7 tasks for 7 OGs — adjust if different)
-sbatch /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts/stage_data.slurm
+sbatch /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/scripts/stage_data.slurm
 
 # Monitor jobs
 squeue -u $USER
 
 # Check per-OG logs
-tail -f /scratch/pawsey0964/lhuet/post_curation/logs/stage_<jobid>_<taskid>.log
+tail -f /scratch/pawsey0964/$USER/post_curation/logs/stage_<jobid>_<taskid>.log
 ```
 
 If you have a different number of OGs, update the `--array` line in `stage_data.slurm` before submitting (e.g. `--array=0-4` for 5 OGs).
@@ -122,12 +124,12 @@ If you have a different number of OGs, update the `--array` line in `stage_data.
 Runs all 3 data types (Hi-C, assembly, meryl) in parallel background jobs on the login node. Suitable for small batches.
 
 ```bash
-cd /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/scripts
+cd /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/scripts
 bash stage_all.sh                        # generates samplesheet + stages everything
 bash stage_all.sh --no-samplesheet       # skip samplesheet regeneration
 ```
 
-Logs are written to `/scratch/pawsey0964/lhuet/post_curation/logs/`.
+Logs are written to `/scratch/pawsey0964/$USER/post_curation/logs/`.
 
 ### What gets staged
 
@@ -157,18 +159,18 @@ The `{date}` and `{version}` parts must match the values in the samplesheet.
 
 ```bash
 # From your local computer
-scp OG696_v240228.hic1.*.agp* lhuet@setonix.pawsey.org.au:/scratch/pawsey0964/lhuet/post_curation/OG696/agp/
+scp OG696_v240228.hic1.*.agp* $USER@setonix.pawsey.org.au:/scratch/pawsey0964/$USER/post_curation/OG696/agp/
 
 # Or transfer multiple at once
-scp OG*_v*.hic*.agp* lhuet@setonix.pawsey.org.au:/scratch/pawsey0964/lhuet/post_curation/
+scp OG*_v*.hic*.agp* $USER@setonix.pawsey.org.au:/scratch/pawsey0964/$USER/post_curation/
 ```
 
 If you drop AGP files into the staging base directory rather than the `agp/` subdirectory, you can move them to the right place with:
 
 ```bash
-for f in /scratch/pawsey0964/lhuet/post_curation/OG*_v*.agp*; do
+for f in /scratch/pawsey0964/$USER/post_curation/OG*_v*.agp*; do
   og=$(basename "$f" | grep -o 'OG[0-9]*')
-  [[ -n "$og" ]] && mv "$f" "/scratch/pawsey0964/lhuet/post_curation/${og}/agp/"
+  [[ -n "$og" ]] && mv "$f" "/scratch/pawsey0964/$USER/post_curation/${og}/agp/"
 done
 ```
 
@@ -179,7 +181,7 @@ done
 Before launching the pipeline, confirm all required files are present for each OG:
 
 ```bash
-STAGING=/scratch/pawsey0964/lhuet/post_curation
+STAGING=/scratch/pawsey0964/$USER/post_curation
 SAMPLESHEET=$STAGING/OceanOmics-OceanGenomes-post-curation/assets/samplesheet.csv
 
 tail -n +2 "$SAMPLESHEET" | cut -d, -f1 | while read og; do
@@ -211,7 +213,7 @@ The pipeline must be launched from within a **tmux session** on Setonix so it ke
 tmux new-session -s post_curation_nf
 # or: tmux attach -t post_curation_nf
 
-cd /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation
+cd /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation
 
 bash nextflow_run.sh
 ```
@@ -241,7 +243,7 @@ nextflow run main.nf \
 | `--tempdir` | Temp dir for pairtools sort (needs ~100 GB free space) |
 | `-resume` | Restart from where a previous run left off (always include this) |
 
-> **BUSCO database:** Available databases are at `/scratch/pawsey0964/lhuet/busco_db/`. Check this directory if your samples are not fish (e.g. sharks use a different lineage).
+> **BUSCO database:** Available databases are at `/scratch/pawsey0964/$USER/busco_db/`. Check this directory if your samples are not fish (e.g. sharks use a different lineage).
 
 ---
 
@@ -268,7 +270,7 @@ nextflow log <run-name> -f name,status,exit,work_dir | grep -v OK
 
 ## Step 8 — Review outputs
 
-Results are written to `--outdir` (default: `/scratch/pawsey0964/lhuet/post_curation/`), organised per sample under `post-curation/{sample}/`.
+Results are written to `--outdir` (default: `/scratch/pawsey0964/$USER/post_curation/`), organised per sample under `post-curation/{sample}/`.
 
 | Output directory | Contents |
 |-----------------|----------|
@@ -295,7 +297,7 @@ Results are written to `--outdir` (default: `/scratch/pawsey0964/lhuet/post_cura
 After the pipeline completes, run `post_pipeline.sh` which handles everything in one command:
 
 ```bash
-cd /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation
+cd /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation
 bash scripts/post_pipeline.sh scripts/postcuration_pipeline.conf
 ```
 
@@ -321,7 +323,7 @@ df -h $MYSCRATCH
 ```
 If low on space, use a different temp location:
 ```bash
-nextflow run main.nf ... --tempdir /scratch/pawsey0964/lhuet/tmp
+nextflow run main.nf ... --tempdir /scratch/pawsey0964/$USER/tmp
 ```
 
 ### RAPID_CURATION fails with missing sequences
@@ -330,7 +332,7 @@ The AGP file references sequence names that don't match the assembly FASTA. Chec
 ### BUSCO is slow or fails
 Check the `--buscodb` path exists and is the correct lineage for your taxa:
 ```bash
-ls /scratch/pawsey0964/lhuet/busco_db/
+ls /scratch/pawsey0964/$USER/busco_db/
 ls /scratch/references/busco_db/
 ```
 
@@ -367,8 +369,8 @@ nextflow log <run-name> -f name,status | grep -v COMPLETED | grep -v CACHED
 
 ```bash
 # ── Config ────────────────────────────────────────────────────────────────────
-PIPELINE=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation
-STAGING=/scratch/pawsey0964/lhuet/post_curation
+PIPELINE=/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation
+STAGING=/scratch/pawsey0964/$USER/post_curation
 SCRIPTS=$PIPELINE/scripts
 SING=/software/projects/pawsey0964/singularity
 

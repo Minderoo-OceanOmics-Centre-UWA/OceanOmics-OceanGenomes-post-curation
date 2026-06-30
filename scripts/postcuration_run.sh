@@ -21,7 +21,7 @@ mkdir -p "$LOG_DIR"
 # ── Defaults (override via CLI passthrough to nextflow) ────────────────────
 BUSCODB="${BUSCODB:-/scratch/references/busco_db/actinopterygii_odb10}"
 BINDDIR="${BINDDIR:-/scratch}"
-TEMPDIR="${TEMPDIR:-/scratch/pawsey0964/lhuet/tmp}"
+TEMPDIR="${TEMPDIR:-/scratch/pawsey0964/$USER/tmp}"
 CURATION_TOOL="rapid-curation"   # change to rapid-curation if needed
 
 # Parse our own args; anything unrecognised is passed straight to nextflow
@@ -39,8 +39,10 @@ done
 source <(grep -E '^[A-Z_][A-Z0-9_]*=' "$CONFIG")
 
 SAMPLESHEET_REAL="${SAMPLESHEET//\{user\}/$USER}"
-OUTDIR="$STAGING_BASE_DIR"
+OUTDIR="${STAGING_BASE_DIR//\{user\}/$USER}"
 NF_LOG="$LOG_DIR/nextflow_$STAMP.log"
+
+mkdir -p "$TEMPDIR"
 
 echo "=== Post-Curation Pipeline Run ==="
 echo "Config        : $CONFIG"

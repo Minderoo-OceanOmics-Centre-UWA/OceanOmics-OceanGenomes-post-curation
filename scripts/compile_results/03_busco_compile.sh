@@ -1,7 +1,8 @@
 #!/bin/bash
+# Usage: 03_busco_compile.sh [post-curation-dir]
 
 output_file="BUSCO_compiled_results.tsv"
-base_dir="/scratch/pawsey0964/lhuet/post_curation/post-curation/OG*"
+base_dir="${1:-/scratch/pawsey0964/$USER/post_curation/post-curation}/OG*"
 echo -e "sample\tdataset\tcomplete\tsingle_copy\tmulti_copy\tfragmented\tmissing\tn_markers\tinternal_stop_codon_percent\tscaffold_n50_bus\tcontigs_n50_bus\tpercent_gaps\tnumber_of_scaffolds" > "$output_file"
 
 # Find all busco batch summary files (hic1, hic2, etc.)

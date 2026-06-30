@@ -15,6 +15,8 @@ This document covers the end-to-end workflow on Pawsey Setonix, from staging inp
 
 That's it. Details for each step below.
 
+> **Working directory convention:** every script and example in this guide assumes you stage and run from `/scratch/pawsey0964/$USER/post_curation/`, with the pipeline repo cloned inside it at `/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/`. Pipeline outputs land in `/scratch/pawsey0964/$USER/post_curation/post-curation/OG*/`. Set `STAGING_BASE_DIR` in the config to match if you use a different layout.
+
 ---
 
 ## Prerequisites
@@ -61,7 +63,7 @@ The `{user}` placeholder in paths is automatically replaced with `$USER` at runt
 ## Step 2 — Stage input data
 
 ```bash
-cd /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation
+cd /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation
 bash scripts/stage_all.sh
 ```
 
@@ -103,19 +105,19 @@ The `{date}` and `{version}` parts must match the values in `assets/samplesheet.
 
 ```bash
 # From your local machine — transfer directly into the agp/ dirs
-scp OG696_v240228.hic1.*.agp* lhuet@setonix.pawsey.org.au:/scratch/pawsey0964/lhuet/post_curation/OG696/agp/
+scp OG696_v240228.hic1.*.agp* $USER@setonix.pawsey.org.au:/scratch/pawsey0964/$USER/post_curation/OG696/agp/
 
 # Or drop into the staging root and auto-sort:
-for f in /scratch/pawsey0964/lhuet/post_curation/OG*_v*.agp*; do
+for f in /scratch/pawsey0964/$USER/post_curation/OG*_v*.agp*; do
   og=$(basename "$f" | grep -o 'OG[0-9]*')
-  [[ -n "$og" ]] && mv "$f" "/scratch/pawsey0964/lhuet/post_curation/${og}/agp/"
+  [[ -n "$og" ]] && mv "$f" "/scratch/pawsey0964/$USER/post_curation/${og}/agp/"
 done
 ```
 
 **Verify everything is in place before running the pipeline:**
 
 ```bash
-STAGING=/scratch/pawsey0964/lhuet/post_curation
+STAGING=/scratch/pawsey0964/$USER/post_curation
 tail -n +2 assets/samplesheet.csv | cut -d, -f1 | while read og; do
   echo "$og | HiC: $(ls $STAGING/$og/hic/*.fastq.gz 2>/dev/null | wc -l) \
   | Asm: $(ls $STAGING/$og/assembly/*.fa 2>/dev/null | wc -l) \
@@ -135,7 +137,7 @@ Launch from inside a **tmux session** so it keeps running after you disconnect:
 ```bash
 tmux new-session -s post_curation   # or: tmux attach -t post_curation
 
-cd /scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation
+cd /scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation
 bash scripts/postcuration_run.sh
 ```
 
@@ -267,9 +269,9 @@ bash scripts/post_pipeline.sh scripts/postcuration_pipeline.conf
 Re-run backup for a single OG:
 
 ```bash
-sbatch scripts/backup_scripts/backup.sh <OG> <date> <version> /scratch/pawsey0964/lhuet/post_curation/post-curation
+sbatch scripts/backup_scripts/backup.sh <OG> <date> <version> /scratch/pawsey0964/$USER/post_curation/post-curation
 # e.g.:
-sbatch scripts/backup_scripts/backup.sh OG55 v231115 hic1 /scratch/pawsey0964/lhuet/post_curation/post-curation
+sbatch scripts/backup_scripts/backup.sh OG55 v231115 hic1 /scratch/pawsey0964/$USER/post_curation/post-curation
 ```
 
 ### OMNIC fails (pairtools sort out of space)
@@ -277,13 +279,13 @@ sbatch scripts/backup_scripts/backup.sh OG55 v231115 hic1 /scratch/pawsey0964/lh
 Ensure `--tempdir` points to a location with ≥100 GB free:
 
 ```bash
-df -h /scratch/pawsey0964/lhuet/tmp
+df -h /scratch/pawsey0964/$USER/tmp
 ```
 
 If low on space, set a different temp dir:
 
 ```bash
-bash scripts/postcuration_run.sh --tempdir /scratch/pawsey0964/lhuet/tmp2
+bash scripts/postcuration_run.sh --tempdir /scratch/pawsey0964/$USER/tmp2
 ```
 
 ### Samplesheet has NULL values

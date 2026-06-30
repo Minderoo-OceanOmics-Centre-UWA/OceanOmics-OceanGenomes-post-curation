@@ -6,13 +6,12 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=12:00:00
 #SBATCH --export=NONE
-#SBATCH --mail-type=BEGIN,END
-#SBATCH --mail-user=lauren.huet@uwa.edu.au
+# Add your own --mail-user / --mail-type directives if you want job notifications.
 
 OG=$1
 date=$2
 version=$3
-BASE_DIR="${4:-/scratch/pawsey0964/lhuet/post_curation/post-curation}"
+BASE_DIR="${4:-/scratch/pawsey0964/$USER/post_curation/post-curation}"
 asm_ver="${OG}_${date}.${version}"
 
 if [[ -z "$OG" || ! -d "$BASE_DIR/$OG" ]]; then

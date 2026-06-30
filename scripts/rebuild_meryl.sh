@@ -7,17 +7,16 @@
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
 #SBATCH --export=NONE
-#SBATCH --output=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/logs/rebuild_meryl_%j.log
-#SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=lauren.huet@uwa.edu.au
+#SBATCH --output=/scratch/pawsey0964/%u/post_curation/OceanOmics-OceanGenomes-post-curation/logs/rebuild_meryl_%j.log
+# Add your own --mail-user / --mail-type directives if you want job notifications.
 
 set -euo pipefail
 
 module load singularity/4.1.0-slurm rclone/1.68.1
 
-MERQURY_IMG=/software/projects/pawsey0964/lhuet/.nextflow_singularity/depot.galaxyproject.org-singularity-merqury-1.3--hdfd78af_1.img
-MERYL_OUTBASE=/scratch/pawsey0964/lhuet/post_curation
-HIFI_BASE=/scratch/pawsey0964/lhuet/ref-gen1
+MERQURY_IMG=/software/projects/pawsey0964/$USER/.nextflow_singularity/depot.galaxyproject.org-singularity-merqury-1.3--hdfd78af_1.img
+MERYL_OUTBASE=/scratch/pawsey0964/$USER/post_curation
+HIFI_BASE=/scratch/pawsey0964/$USER/ref-gen1
 ACACIA_BASE="pawsey0964:oceanomics-refassemblies"
 THREADS=16
 

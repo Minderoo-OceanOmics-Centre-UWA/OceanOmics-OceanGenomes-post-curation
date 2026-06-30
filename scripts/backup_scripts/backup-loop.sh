@@ -6,8 +6,8 @@
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SAMPLESHEET="${1:-/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/assets/samplesheet.csv}"
-BASE_DIR="${2:-/scratch/pawsey0964/lhuet/post_curation/post-curation}"
+SAMPLESHEET="${1:-/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/assets/samplesheet.csv}"
+BASE_DIR="${2:-/scratch/pawsey0964/$USER/post_curation/post-curation}"
 
 [[ -f "$SAMPLESHEET" ]] || { echo "Samplesheet not found: $SAMPLESHEET" >&2; exit 1; }
 

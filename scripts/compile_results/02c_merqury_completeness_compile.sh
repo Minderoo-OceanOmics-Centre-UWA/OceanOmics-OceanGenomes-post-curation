@@ -1,7 +1,8 @@
 #!/bin/bash
+# Usage: 02c_merqury_completeness_compile.sh [post-curation-dir]
 
 output_file="merqury.completeness.stats.tsv"
-base_dir="/scratch/pawsey0964/lhuet/post_curation/post-curation/OG*"
+base_dir="${1:-/scratch/pawsey0964/$USER/post_curation/post-curation}/OG*"
 
 # Write header
 echo -e "sample\tsolid_k_mers\ttotal_k_mers\tcompleteness" > "$output_file"

@@ -26,8 +26,9 @@ mkdir -p "$LOG_DIR"
 # Source config (only KEY=VALUE lines)
 source <(grep -E '^[A-Z_][A-Z0-9_]*=' "$CONFIG")
 
-OUTDIR="${STAGING_BASE_DIR}/post-curation"
-MULTIQC_DIR="${STAGING_BASE_DIR}/multiqc"
+STAGING_BASE_DIR_REAL="${STAGING_BASE_DIR//\{user\}/$USER}"
+OUTDIR="${STAGING_BASE_DIR_REAL}/post-curation"
+MULTIQC_DIR="${STAGING_BASE_DIR_REAL}/multiqc"
 SAMPLESHEET_REAL="${SAMPLESHEET//\{user\}/$USER}"
 
 [[ -f "$SAMPLESHEET_REAL" ]] || { echo "Samplesheet not found: $SAMPLESHEET_REAL" >&2; exit 1; }
@@ -48,12 +49,12 @@ echo "[1/5] Compiling QC results → $COMPILE_DIR"
 
 (
   cd "$COMPILE_DIR"
-  bash "$SCRIPT_DIR/compile_results/02a_merqury_qv_compile.sh"
-  bash "$SCRIPT_DIR/compile_results/02c_merqury_completeness_compile.sh"
-  bash "$SCRIPT_DIR/compile_results/03_busco_compile.sh"
-  bash "$SCRIPT_DIR/compile_results/04_final_gfastats_compile.sh"
-  bash "$SCRIPT_DIR/compile_results/05_stats_compile.sh"
-  bash "$SCRIPT_DIR/compile_results/06_compile_percent_stats.sh"
+  bash "$SCRIPT_DIR/compile_results/02a_merqury_qv_compile.sh" "$OUTDIR"
+  bash "$SCRIPT_DIR/compile_results/02c_merqury_completeness_compile.sh" "$OUTDIR"
+  bash "$SCRIPT_DIR/compile_results/03_busco_compile.sh" "$OUTDIR"
+  bash "$SCRIPT_DIR/compile_results/04_final_gfastats_compile.sh" "$OUTDIR"
+  bash "$SCRIPT_DIR/compile_results/05_stats_compile.sh" "$OUTDIR"
+  bash "$SCRIPT_DIR/compile_results/06_compile_percent_stats.sh" "$OUTDIR"
 ) 2>&1 | tee "$LOG_DIR/compile_$STAMP.log"
 echo "[OK] Compile done"
 echo ""

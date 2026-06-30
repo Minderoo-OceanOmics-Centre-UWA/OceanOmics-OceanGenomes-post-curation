@@ -10,12 +10,12 @@ set -u
 #   backup_audit.sh -n ...              # dry-run (no rclone calls)
 
 SCRIPTS_DIR=$(dirname "${BASH_SOURCE[0]}")
-DEFAULT_SAMPLESHEET=/scratch/pawsey0964/lhuet/post_curation/OceanOmics-OceanGenomes-post-curation/assets/samplesheet_04_02_2025.csv
+DEFAULT_SAMPLESHEET=/scratch/pawsey0964/$USER/post_curation/OceanOmics-OceanGenomes-post-curation/assets/samplesheet_04_02_2025.csv
 
 DRY_RUN=0
 SAMPLESHEET=""
 OUTDIR=""
-DATADIR="/scratch/pawsey0964/lhuet/post_curation/post-curation"
+DATADIR="/scratch/pawsey0964/$USER/post_curation/post-curation"
 
 print_usage(){
   cat <<EOF
