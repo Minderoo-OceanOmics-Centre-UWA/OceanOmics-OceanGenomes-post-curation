@@ -105,11 +105,14 @@ echo "[4/5] Backing up MultiQC report..."
 MULTIQC_SRC="$MULTIQC_DIR/multiqc_report.html"
 if [[ -f "$MULTIQC_SRC" ]]; then
   MULTIQC_DEST="$MULTIQC_DIR/$(date +"%Y_%m_%d")_post_curation_multiqc_report.html"
+  MULTIQC_REMOTE="pawsey0964:oceanomics-refassemblies/postcuration_multiqc"
   cp "$MULTIQC_SRC" "$MULTIQC_DEST"
-  rclone copy "$MULTIQC_DEST" \
-    "pawsey0964:oceanomics-refassemblies/postcuration_multiqc" \
-    --checksum --progress
-  echo "[OK] MultiQC backed up"
+  rclone copy "$MULTIQC_DEST" "$MULTIQC_REMOTE" --checksum --progress
+  if rclone check "$MULTIQC_DEST" "$MULTIQC_REMOTE" --checksum --one-way; then
+    echo "[OK] MultiQC backed up and verified"
+  else
+    echo "[WARN] MultiQC rclone check failed — report may not be backed up correctly"
+  fi
 else
   echo "[WARN] MultiQC report not found at $MULTIQC_SRC — skipping"
 fi
@@ -123,7 +126,9 @@ AUDIT_LOG_DIR="$LOG_DIR/audit_$STAMP"
 mkdir -p "$AUDIT_LOG_DIR"
 
 if [[ ${#BACKUP_JOB_IDS[@]} -gt 0 ]]; then
-  DEPENDENCY="afterok:$(IFS=':'; echo "${BACKUP_JOB_IDS[*]}")"
+  # afterany, not afterok: backup.sh exits non-zero if any rclone check fails, and
+  # a failed backup is precisely when the audit report is most useful.
+  DEPENDENCY="afterany:$(IFS=':'; echo "${BACKUP_JOB_IDS[*]}")"
   AUDIT_JOB=$(sbatch --parsable \
     --dependency="$DEPENDENCY" \
     --account=pawsey1348 \
