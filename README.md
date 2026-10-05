@@ -63,7 +63,7 @@ SAMPLE1,/path/to/hic,/path/to/assembly,/path/to/meryl,/path/to/agp,hic1,v240228,
 | `assembly` | Directory containing the input assembly FASTA |
 | `meryldb` | Directory containing the pre-built Meryl k-mer database |
 | `agp` | Directory containing the AGP file from PretextView |
-| `version` | Hi-C library version (e.g. `hic1`, `hic2`) |
+| `version` | Version of the assembly being curated (e.g. `hic1`, `hic2`) — matches the assembly, never bumped by post-curation |
 | `date` | Sequencing date as `vYYMMDD` (e.g. `v240228`) |
 | `genomesize` | Estimated genome size in bp (from GenomeScope) |
 

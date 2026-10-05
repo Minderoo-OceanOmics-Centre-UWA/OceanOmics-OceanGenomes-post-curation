@@ -85,6 +85,7 @@ process BUSCO_BUSCO {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         busco: \$( busco --version 2>&1 | sed 's/^BUSCO //' )
+        busco_lineage: \$( cat ./$busco_lineages_path/dataset.cfg 2>/dev/null | awk -F= '\$1=="name"{n=\$2} \$1=="creation_date"{d=\$2} END{print (n ? n" (created "d")" : "unknown")}' )
     END_VERSIONS
     """
 

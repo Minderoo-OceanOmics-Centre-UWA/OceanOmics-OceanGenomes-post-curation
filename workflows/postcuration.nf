@@ -26,6 +26,7 @@ include { paramsSummaryMap          } from 'plugin/nf-validation'
 include { paramsSummaryMultiqc      } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML    } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText    } from '../subworkflows/local/utils_nfcore_postcuration_pipeline'
+include { pipelineGitToYAML         } from '../subworkflows/local/utils_nfcore_postcuration_pipeline'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,6 +96,7 @@ workflow POSTCURATION {
 
     if (params.curation_tool == 'rapid-curation') {
         RAPID_CURATION(agp_assembly_ch)
+        ch_versions = ch_versions.mix(RAPID_CURATION.out.versions.first())
 
         ch_haplotypes = RAPID_CURATION.out.hap1.join(RAPID_CURATION.out.hap2)
         MASHMAP(ch_haplotypes)
@@ -124,6 +126,7 @@ workflow POSTCURATION {
         []
     )
     ch_multiqc_files = ch_multiqc_files.mix(BUSCO_BUSCO.out.batch_summary)
+    ch_versions = ch_versions.mix(BUSCO_BUSCO.out.versions.first())
 
     //
     //MODULE: Run Merqury
@@ -140,6 +143,7 @@ workflow POSTCURATION {
     )
     ch_multiqc_files = ch_multiqc_files.mix(MERQURY_MERQURY.out.stats)
     ch_multiqc_files = ch_multiqc_files.mix(MERQURY_MERQURY.out.assembly_qv)
+    ch_versions = ch_versions.mix(MERQURY_MERQURY.out.versions.first())
 
     //
     // MODULE: run gfastats
@@ -182,6 +186,7 @@ workflow POSTCURATION {
     CAT_HIC (
         ch_hic
     )
+    ch_versions = ch_versions.mix(CAT_HIC.out.versions.first())
 
     ///
     /// MODULE: Calculate stats
@@ -195,11 +200,13 @@ workflow POSTCURATION {
             ch_hap1_for_stats,
             ch_hap2_for_stats
         )
+        ch_versions = ch_versions.mix(CALCULATE_STATS.out.versions.first())
     } else {
         CALCULATE_STATS_PRETEXT (
             ch_hap1_for_stats,
             ch_hap2_for_stats
         )
+        ch_versions = ch_versions.mix(CALCULATE_STATS_PRETEXT.out.versions.first())
     }
 
     //
@@ -241,7 +248,7 @@ workflow POSTCURATION {
                     "hap2",
                     "3.curated")
     
-    ch_versions = ch_versions.mix(PRETEXTMAP_HAP_1.out.versions.first())
+    ch_versions = ch_versions.mix(PRETEXTMAP_HAP_2.out.versions.first())
 
     
     //
@@ -266,6 +273,7 @@ workflow POSTCURATION {
     // Collate and save software versions
     //
     softwareVersionsToYAML(ch_versions)
+        .mix(Channel.of(pipelineGitToYAML()))
         .collectFile(
             storeDir: "${params.outdir}/pipeline_info",
             name: 'nf_core_pipeline_software_mqc_versions.yml',

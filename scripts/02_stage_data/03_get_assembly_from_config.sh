@@ -40,23 +40,26 @@ tmp_pairs="$(mktemp)"
 trap 'rm -f "$tmp_list" "$tmp_pairs"' EXIT
 
 declare -A ASSEMBLY_DIR
+declare -A ASM_FOLDER
 samples=()
 
-# map sample -> assembly dir (col1 -> col3)
-while IFS=$'\t' read -r sample assembly_dir; do
+# map sample -> assembly dir (col1 -> col3) and assembly folder <OG>_<date>.<version> (cols 7, 6)
+while IFS=$'\t' read -r sample assembly_dir version asm_date; do
   sample="$(clean "$sample")"
   assembly_dir="$(clean "$assembly_dir")"
   [[ -z "$sample" ]] && continue
   ASSEMBLY_DIR["$sample"]="$(expand_user "$assembly_dir")"
+  ASM_FOLDER["$sample"]="${sample}_$(clean "$asm_date").$(clean "$version")"
   samples+=("$sample")
-done < <(awk -F, 'NR>1 { gsub(/\r/,"",$1); gsub(/\r/,"",$3); print $1 "\t" $3 }' "$SAMPLESHEET")
+done < <(awk -F, 'NR>1 { gsub(/\r/,""); print $1 "\t" $3 "\t" $6 "\t" $7 }' "$SAMPLESHEET")
 
 [[ ${#samples[@]} -gt 0 ]] || { echo "No samples found in $SAMPLESHEET" >&2; exit 1; }
 
 for s in "${samples[@]}"; do mkdir -p "${ASSEMBLY_DIR[$s]}"; done
 
+# Only the assembly version named in the samplesheet (also stops OG5 matching OG52 etc.)
 include=()
-for s in "${samples[@]}"; do include+=( --include "${s}*${ASSEMBLY_GLOB_SUFFIX}*" ); done
+for s in "${samples[@]}"; do include+=( --include "/${s}/${ASM_FOLDER[$s]}/**${ASSEMBLY_GLOB_SUFFIX}*" ); done
 rclone ls "$ASSEMBLY_BUCKET" ${RCLONE_FLAGS:+$RCLONE_FLAGS} "${include[@]}" > "$tmp_list"
 
 # Build remote_path <TAB> local_dir pairs
@@ -97,5 +100,14 @@ while IFS=$'\t' read -r src dst; do
   fi
 done < "$tmp_pairs"
 wait
+
+missing=0
+for s in "${samples[@]}"; do
+  if ! grep -q "/${ASM_FOLDER[$s]}/" "$tmp_list"; then
+    echo "ERROR: no assembly found for $s under ${ASSEMBLY_BUCKET}/${s}/${ASM_FOLDER[$s]}/ — check version/date in $SAMPLESHEET" >&2
+    missing=1
+  fi
+done
+[[ $missing -eq 0 ]] || exit 1
 
 echo "Done."

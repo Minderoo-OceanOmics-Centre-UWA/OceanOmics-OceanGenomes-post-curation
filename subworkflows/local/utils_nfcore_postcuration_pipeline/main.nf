@@ -261,3 +261,27 @@ def methodsDescriptionText(mqc_methods_yaml) {
 
     return description_html.toString()
 }
+
+//
+// Git version of the pipeline repo for the MultiQC software versions table
+// (workflow.commitId is only set when running from a remote repo, not a local clone)
+//
+def pipelineGitToYAML() {
+    def git = { String args ->
+        try {
+            def proc = "git -C ${workflow.projectDir} ${args}".execute()
+            def out  = proc.text.trim()
+            proc.waitFor()
+            return (proc.exitValue() == 0 && out) ? out : 'unknown'
+        } catch (Exception e) {
+            return 'unknown'
+        }
+    }
+    return """
+    Pipeline:
+        repository: "${git('remote get-url origin')}"
+        branch: "${git('rev-parse --abbrev-ref HEAD')}"
+        commit: "${workflow.commitId ?: git('rev-parse HEAD')}"
+        version: "${git('describe --tags --always --dirty')}"
+    """.stripIndent().trim()
+}

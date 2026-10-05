@@ -89,7 +89,7 @@ The samplesheet has one row per OG with these columns:
 | `assembly` | `.../OG696/assembly` | Directory where assembly FASTA will be staged |
 | `meryldb` | `.../OG696/meryl` | Directory where meryl DB will be staged |
 | `agp` | `.../OG696/agp` | Directory where you place the AGP file |
-| `version` | `hic1` | Hi-C library version |
+| `version` | `hic1` | Assembly version being curated — taken from the latest Hi-C assembly in `ref_genomes` |
 | `date` | `v240228` | PacBio sequencing date (v + YYMMDD) |
 | `genomesize` | `1375723817` | Estimated genome size in bp (from GenomeScope) |
 

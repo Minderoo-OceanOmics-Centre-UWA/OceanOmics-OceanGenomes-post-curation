@@ -8,7 +8,7 @@
 #   1. Compile all QC outputs into TSV files
 #   2. Push compiled results to PostgreSQL via singularity
 #   3. Submit per-OG backup SLURM jobs to Acacia
-#   4. Back up MultiQC report
+#   4. Back up MultiQC reports (one per OG)
 #   5. Submit audit SLURM job (runs after all backups complete)
 
 set -euo pipefail
@@ -28,7 +28,6 @@ source <(grep -E '^[A-Z_][A-Z0-9_]*=' "$CONFIG")
 
 STAGING_BASE_DIR_REAL="${STAGING_BASE_DIR//\{user\}/$USER}"
 OUTDIR="${STAGING_BASE_DIR_REAL}/post-curation"
-MULTIQC_DIR="${STAGING_BASE_DIR_REAL}/multiqc"
 SAMPLESHEET_REAL="${SAMPLESHEET//\{user\}/$USER}"
 
 [[ -f "$SAMPLESHEET_REAL" ]] || { echo "Samplesheet not found: $SAMPLESHEET_REAL" >&2; exit 1; }
@@ -99,22 +98,35 @@ echo "[OK] ${#BACKUP_JOB_IDS[@]} backup jobs submitted: ${BACKUP_JOB_IDS[*]}"
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# 4. Backup MultiQC report (once, not per-OG)
+# 4. Backup MultiQC reports (one per OG, at $OUTDIR/<OG>/multiqc/)
 # ────────────────────────────────────────────────────────────────────────────
-echo "[4/5] Backing up MultiQC report..."
-MULTIQC_SRC="$MULTIQC_DIR/multiqc_report.html"
-if [[ -f "$MULTIQC_SRC" ]]; then
-  MULTIQC_DEST="$MULTIQC_DIR/$(date +"%Y_%m_%d")_post_curation_multiqc_report.html"
-  MULTIQC_REMOTE="pawsey0964:oceanomics-refassemblies/postcuration_multiqc"
-  cp "$MULTIQC_SRC" "$MULTIQC_DEST"
-  rclone copy "$MULTIQC_DEST" "$MULTIQC_REMOTE" --checksum --progress
-  if rclone check "$MULTIQC_DEST" "$MULTIQC_REMOTE" --checksum --one-way; then
-    echo "[OK] MultiQC backed up and verified"
+echo "[4/5] Backing up MultiQC reports..."
+MULTIQC_REMOTE="pawsey0964:oceanomics-refassemblies/postcuration_multiqc"
+# Dated copies are staged outside the pipeline outdir so reruns don't pick them up
+MULTIQC_STAGE="$LOG_DIR/multiqc_$STAMP"
+mkdir -p "$MULTIQC_STAGE"
+
+tail -n +2 "$SAMPLESHEET_REAL" | while IFS=, read -r sample _rest; do
+  sample="${sample//[$'\t\r\n ']}"
+  [[ -n "$sample" ]] || continue
+  found=0
+  for src in "$OUTDIR/$sample"/multiqc/*multiqc_report.html; do
+    [[ -f "$src" ]] || continue
+    cp "$src" "$MULTIQC_STAGE/$(date +"%Y_%m_%d")_post_curation_$(basename "$src")"
+    found=1
+  done
+  [[ $found -eq 1 ]] || echo "  [WARN] No MultiQC report for $sample in $OUTDIR/$sample/multiqc"
+done
+
+if compgen -G "$MULTIQC_STAGE/*.html" > /dev/null; then
+  rclone copy "$MULTIQC_STAGE" "$MULTIQC_REMOTE" --checksum --progress
+  if rclone check "$MULTIQC_STAGE" "$MULTIQC_REMOTE" --checksum --one-way; then
+    echo "[OK] $(ls "$MULTIQC_STAGE" | wc -l) MultiQC report(s) backed up and verified"
   else
-    echo "[WARN] MultiQC rclone check failed — report may not be backed up correctly"
+    echo "[WARN] MultiQC rclone check failed — reports may not be backed up correctly"
   fi
 else
-  echo "[WARN] MultiQC report not found at $MULTIQC_SRC — skipping"
+  echo "[WARN] No MultiQC reports found under $OUTDIR — skipping"
 fi
 echo ""
 

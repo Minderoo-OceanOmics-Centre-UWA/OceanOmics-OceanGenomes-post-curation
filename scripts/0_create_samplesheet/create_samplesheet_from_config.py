@@ -7,6 +7,10 @@ INI file whose path is provided in the pipeline config as POSTGRES_CFG.
 Outputs columns:
   sample,hic_dir,assembly,meryldb,agp,version,date,genomesize
 
+version and date come from the latest existing Hi-C assembly in ref_genomes
+(highest hicN, then newest seq_date). Post-curation never bumps the version:
+curating hic1 stays hic1, curating hic2 stays hic2.
+
 Required config keys:
   POSTGRES_CFG=~/postgresql_details/oceanomics.cfg
   OG_IDS=...
@@ -141,7 +145,8 @@ def build_function_sql(staging_base_dir: str) -> str:
     Builds function:
       sample,hic_dir,assembly,meryldb,agp,version,date,genomesize
 
-    IMPORTANT: version is always 'hic1' (no ref_genomes check).
+    version/date are taken together from the same ref_genomes row so they always
+    name an assembly that exists (<OG>_<date>.<version> in the assembly bucket).
     """
     base = staging_base_dir.rstrip("/")
     base_sql = base.replace("'", "''")  # SQL literal escape
@@ -163,14 +168,18 @@ AS $$
 WITH p AS (
   SELECT unnest(in_og_ids) AS og_id
 ),
-latest_seq AS (
-  SELECT DISTINCT ON (seq.og_id)
-         seq.og_id,
-         seq.seq_date::date AS seq_date
-  FROM sequencing seq
-  JOIN p ON seq.og_id = p.og_id
-  WHERE seq.seq_type = 'PacBio'
-  ORDER BY seq.og_id, seq.seq_date DESC
+latest_asm AS (
+  SELECT DISTINCT ON (rg.og_id)
+         rg.og_id,
+         rg.version,
+         rg.seq_date
+  FROM ref_genomes rg
+  JOIN p ON rg.og_id = p.og_id
+  WHERE rg.version ~ '^hic[0-9]+$'
+    AND rg.seq_date ~ '^[0-9]{{6}}$'
+  ORDER BY rg.og_id,
+           substring(rg.version from '[0-9]+')::int DESC,
+           rg.seq_date DESC
 ),
 gen_sz AS (
   SELECT rq.og_id, MAX(rq.genomesize) AS genome_size
@@ -184,14 +193,14 @@ SELECT DISTINCT ON (p.og_id)
   '{base_sql}/' || p.og_id || '/assembly' AS assembly,
   '{base_sql}/' || p.og_id || '/meryl'    AS meryldb,
   '{base_sql}/' || p.og_id || '/agp'      AS agp,
-  'hic1'                                  AS version,
+  la.version                              AS version,
   CASE
-    WHEN ls.seq_date IS NOT NULL
-    THEN 'v' || to_char(ls.seq_date, 'YYMMDD')
+    WHEN la.seq_date IS NOT NULL
+    THEN 'v' || la.seq_date
   END                                     AS date,
   gs.genome_size                          AS genomesize
 FROM p
-LEFT JOIN latest_seq ls ON ls.og_id = p.og_id
+LEFT JOIN latest_asm la ON la.og_id = p.og_id
 LEFT JOIN gen_sz gs     ON gs.og_id = p.og_id
 ORDER BY p.og_id;
 $$;
@@ -256,6 +265,10 @@ def main() -> None:
         if not missing_rows.empty:
             print("\nRows with missing values:\n", file=sys.stderr)
             print(missing_rows.to_string(index=False), file=sys.stderr)
+            if missing_rows["version"].isnull().any():
+                print("\n⚠️  No Hi-C assembly (hicN) in ref_genomes for: "
+                      + ", ".join(missing_rows.loc[missing_rows["version"].isnull(), "sample"])
+                      + " — fill version/date manually before staging.", file=sys.stderr)
 
         today = date.today().strftime("%Y%m%d")
         dated_filename = f"{prefix}_{today}.csv"

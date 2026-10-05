@@ -14,6 +14,7 @@ process RAPID_CURATION {
     tuple val(meta), path("Hap_2"), emit: hap2_dir
     tuple val(meta), path("Hap_1/${meta.id}_hap1.chr_level.fa"), emit: hap1, optional: true
     tuple val(meta), path("Hap_2/${meta.id}_hap2.chr_level.fa"), emit: hap2, optional: true
+    path "versions.yml",                                          emit: versions
 
     when:
     task.ext.when == null || task.ext.when
@@ -35,6 +36,13 @@ process RAPID_CURATION {
         mv Hap_2/hap.chr_level.fa Hap_2/${meta.id}_hap2.chr_level.fa
     fi
 
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: \$(python3 --version 2>&1 | sed 's/Python //')
+        biopython: \$(python3 -c "import Bio; print(Bio.__version__)")
+        pandas: \$(python3 -c "import pandas; print(pandas.__version__)")
+        gfastats: \$(gfastats -v | sed '1!d;s/.*v//')
+    END_VERSIONS
     """
 
     stub:
@@ -47,5 +55,12 @@ process RAPID_CURATION {
     touch Hap_2/${meta.id}_hap2.chr_level.fa
     touch logs/std.0.out
 
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        python: \$(python3 --version 2>&1 | sed 's/Python //')
+        biopython: \$(python3 -c "import Bio; print(Bio.__version__)")
+        pandas: \$(python3 -c "import pandas; print(pandas.__version__)")
+        gfastats: \$(gfastats -v | sed '1!d;s/.*v//')
+    END_VERSIONS
     """
 }
