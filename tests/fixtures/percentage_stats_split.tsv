@@ -1,0 +1,3 @@
+sample	og_id	seq_date	version	stage	haplotype	num_chromosomes	pct_assigned	pct_no_super	num_seq_no_super	max_len_no_super
+OG762_v241019.hic1.3.curated.hap1	OG762	241019	hic1	3	hap1	24	95.42	4.58	264	2000000
+OG762_v241019.hic1.3.curated.hap2	OG762	241019	hic1	3	hap2	24	97.53	2.47	200	1500000
