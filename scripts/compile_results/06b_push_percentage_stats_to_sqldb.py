@@ -4,6 +4,10 @@ import configparser
 import sys
 from pathlib import Path
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 # singularity run $SING/psycopg2:0.1.sif python 06b_push_percentage_stats_to_sqldb.py ~/postgresql_details/oceanomics.cfg
 
 def load_db_config(config_file):
@@ -32,33 +36,18 @@ df = pd.read_csv(input_file, sep="\t")
 print("🧾 Rows:", len(df))
 print(df.head())
 
-try:
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
-    count = 0
+# -------------------------------
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_chromosome_stats, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
+# -------------------------------
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
+
+def build_rows():
+    rows = []
     for _, row in df.iterrows():
         row_dict = row.to_dict()
-
-        upsert_query = """
-        INSERT INTO ref_genomes (
-            og_id, seq_date, version, stage, haplotype,
-            num_chromosomes, pct_assigned, pct_no_super,
-            num_seq_no_super, max_len_no_super
-        )
-        VALUES (
-            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s,
-            %(num_chromosomes)s, %(pct_assigned)s, %(pct_no_super)s,
-            %(num_seq_no_super)s, %(max_len_no_super)s
-        )
-        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-            num_chromosomes = EXCLUDED.num_chromosomes,
-            pct_assigned = EXCLUDED.pct_assigned,
-            pct_no_super = EXCLUDED.pct_no_super,
-            num_seq_no_super = EXCLUDED.num_seq_no_super,
-            max_len_no_super = EXCLUDED.max_len_no_super;
-        """
-
         params = {
             "og_id": row_dict["og_id"],
             "seq_date": row_dict["seq_date"],
@@ -71,17 +60,9 @@ try:
             "num_seq_no_super": int(row_dict["num_seq_no_super"]) if pd.notna(row_dict["num_seq_no_super"]) else None,
             "max_len_no_super": int(row_dict["max_len_no_super"]) if pd.notna(row_dict["max_len_no_super"]) else None,
         }
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-        cursor.execute(upsert_query, params)
-        conn.commit()
-        count += 1
 
-    print(f"✅ Successfully pushed {count} rows to the database.")
-
-except Exception as e:
-    print(f"❌ Error during database push: {e}")
-    conn.rollback()
-
-finally:
-    if 'cursor' in locals(): cursor.close()
-    if 'conn' in locals(): conn.close()
+refdb.main_guard(lambda: refdb.write_tool_rows(db_params, "ref_chromosome_stats", build_rows()))

@@ -1,0 +1,3 @@
+sample	dataset	complete	single_copy	multi_copy	fragmented	missing	n_markers	internal_stop_codon_percent	scaffold_n50_bus	contigs_n50_bus	percent_gaps	number_of_scaffolds
+OG762_v241019.hic1.3.curated.hap1.fa	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	1.9	29060000	25826101	0.010%	288
+OG762_v241019.hic1_hap2.chr_level.fa	actinopterygii_odb10	99.2	98.9	0.3	0.6	0.2	3640	1.9	29160000	25826101	0.012%	224

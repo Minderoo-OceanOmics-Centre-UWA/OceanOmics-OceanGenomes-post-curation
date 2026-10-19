@@ -5,6 +5,10 @@ import configparser
 import sys
 from pathlib import Path
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 #run with singularity run $SING/psycopg2:0.1.sif python 04a_push_gfa_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg
 
 def load_db_config(config_file):
@@ -58,46 +62,18 @@ else:
 print("\n🔍 Final dataset summary:")
 print(gfa.describe())
 
-try:
-    # Connect to PostgreSQL
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
+# -------------------------------
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_gfastats, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
+# -------------------------------
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
-    row_count = 0  # Track number of processed rows
 
+def build_rows():
+    rows = []
     for index, row in gfa.iterrows():
         row_dict = row.to_dict()
-
-        # Extract primary key values
-        og_id, seq_date, stage, haplotype = row["og_id"], row["seq_date"], row["stage"], row["haplotype"]
-
-        # UPSERT: Insert if not exists, otherwise update
-        upsert_query = """
-        INSERT INTO ref_genomes (
-            og_id, seq_date, version, stage, haplotype, num_contigs, contig_n50, contig_n50_size_mb, num_scaffolds,
-            scaffold_n50, scaffold_n50_size_mb, largest_scaffold, largest_scaffold_size_mb, total_scaffold_length,
-            total_scaffold_length_size_mb, gc_content_percent, num_gaps
-        )
-        VALUES (
-            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s, %(num_contigs)s, %(contig_n50)s,
-            %(contig_n50_size_mb)s, %(num_scaffolds)s, %(scaffold_n50)s, %(scaffold_n50_size_mb)s,
-            %(largest_scaffold)s, %(largest_scaffold_size_mb)s, %(total_scaffold_length)s,
-            %(total_scaffold_length_size_mb)s, %(gc_content_percent)s, %(num_gaps)s
-        )
-        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-            num_contigs = EXCLUDED.num_contigs,
-            contig_n50 = EXCLUDED.contig_n50,
-            contig_n50_size_mb = EXCLUDED.contig_n50_size_mb,
-            num_scaffolds = EXCLUDED.num_scaffolds,
-            scaffold_n50 = EXCLUDED.scaffold_n50,
-            scaffold_n50_size_mb = EXCLUDED.scaffold_n50_size_mb,
-            largest_scaffold = EXCLUDED.largest_scaffold,
-            largest_scaffold_size_mb = EXCLUDED.largest_scaffold_size_mb,
-            total_scaffold_length = EXCLUDED.total_scaffold_length,
-            total_scaffold_length_size_mb = EXCLUDED.total_scaffold_length_size_mb,
-            gc_content_percent = EXCLUDED.gc_content_percent,
-            num_gaps = EXCLUDED.num_gaps;
-        """
         params = {
             "og_id": row_dict["og_id"],
             "seq_date": row_dict["seq_date"],
@@ -117,23 +93,9 @@ try:
             "gc_content_percent": float(row_dict["gc_content_percent"]) if row_dict["gc_content_percent"] not in [None, ""] else None,
             "num_gaps": None if pd.isna(row_dict["num_gaps"]) else int(row_dict["num_gaps"]),
         }
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-        # Debugging Check
-        print(f"Number of columns in query: {upsert_query.count('%s')}")
-        print(f"Column names in DataFrame: {gfa.columns.tolist()}")
-        print("row:", row_dict)
-        print("params:", params)
 
-        cursor.execute(upsert_query, params)
-        row_count += 1  
-
-        conn.commit()
-        print(f"✅ Successfully processed {row_count} rows!")
-
-except Exception as e:
-    conn.rollback()
-    print(f"❌ Error: {e}")
-
-finally:
-    cursor.close()
-    conn.close()
+refdb.main_guard(lambda: refdb.write_tool_rows(db_params, "ref_gfastats", build_rows()))

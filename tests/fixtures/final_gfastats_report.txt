@@ -1,0 +1,3 @@
+filename	num_contigs	contig_n50	contig_n50_size_mb	num_scaffolds	scaffold_n50	scaffold_n50_size_mb	largest_scaffold	largest_scaffold_size_mb	total_scaffold_length	total_scaffold_length_size_mb	gc_content_percent	num_gaps
+OG762_v241019.hic1.3.curated.hap1.assembly_summary.txt	420	25615257	25.62	288	29060000	29.06	40000000	40.00	1731700000	1731.70	42.96	132
+OG762_v241019.hic1.3.curated.hap2.assembly_summary.txt	330	25826101	25.83	224	29160000	29.16	41000000	41.00	1646120000	1646.12	42.97	106

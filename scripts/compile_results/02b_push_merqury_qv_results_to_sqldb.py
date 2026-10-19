@@ -5,6 +5,10 @@ import configparser
 import sys
 from pathlib import Path
 
+# Phase RG: database writes go through the shared helper (one transaction, non-zero exit on error).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import refdb  # noqa: E402
+
 ## run using singularity run $SING/psycopg2:0.1.sif python 02b_push_merqury_qv_results_to_sqldb.py ~/postgresql_details/oceanomics.cfg
 
 def load_db_config(config_file):
@@ -58,33 +62,18 @@ else:
 print("\n🔍 Final dataset summary:")
 print(merqury.describe())
 
-try:
-    # Connect to PostgreSQL
-    conn = psycopg2.connect(**db_params)
-    cursor = conn.cursor()
+# -------------------------------
+# DB write (Phase RG): one row per assembly, part and tool in ref_assembly, ref_assembly_part and
+# ref_merqury_qv, through scripts/lib/refdb.py. One transaction for the whole file; any error exits 1.
+# Table names are unqualified: search_path decides (v4 during the RG window, public after RG.6).
+# -------------------------------
+PART_KEY = ("og_id", "seq_date", "version", "stage", "haplotype")
 
-    row_count = 0  # Track number of processed rows
 
+def build_rows():
+    rows = []
     for index, row in merqury.iterrows():
         row_dict = row.to_dict()
-
-        # Extract primary key values
-        og_id, seq_date, stage, haplotype = row["og_id"], row["seq_date"], row["stage"], row["haplotype"]
-
-        # UPSERT: Insert if not exists, otherwise update
-        upsert_query = """
-        INSERT INTO ref_genomes (
-            og_id, seq_date, version, stage, haplotype, unique_k_mers_assembly, k_mers_total, qv, error
-        )
-        VALUES (
-            %(og_id)s, %(seq_date)s, %(version)s, %(stage)s, %(haplotype)s, %(unique_k_mers_assembly)s, %(k_mers_total)s, %(qv)s, %(error)s
-        )
-        ON CONFLICT (og_id, seq_date, stage, haplotype, version) DO UPDATE SET
-            unique_k_mers_assembly = EXCLUDED.unique_k_mers_assembly,
-            k_mers_total = EXCLUDED.k_mers_total,
-            qv = EXCLUDED.qv,
-            error = EXCLUDED.error;
-        """
         params = {
             "og_id": row_dict["og_id"],
             "seq_date": row_dict["seq_date"],
@@ -96,23 +85,9 @@ try:
             "qv": float(row_dict["qv"]) if row_dict["qv"] not in [None, ""] else None,
             "error": float(row_dict["error"]) if row_dict["error"] not in [None, ""] else None,
         }
+        rows.append(({k: params[k] for k in PART_KEY},
+                     {k: v for k, v in params.items() if k not in PART_KEY}))
+    return rows
 
-        # Debugging Check
-        print(f"Number of columns in query: {upsert_query.count('%s')}")
-        print(f"Column names in DataFrame: {merqury.columns.tolist()}")
-        print("row:", row_dict)
-        print("params:", params)
 
-        cursor.execute(upsert_query, params)
-        row_count += 1  
-
-        conn.commit()
-        print(f"✅ Successfully processed {row_count} rows!")
-
-except Exception as e:
-    conn.rollback()
-    print(f"❌ Error: {e}")
-
-finally:
-    cursor.close()
-    conn.close()
+refdb.main_guard(lambda: refdb.write_tool_rows(db_params, "ref_merqury_qv", build_rows()))
